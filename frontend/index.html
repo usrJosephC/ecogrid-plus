@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EcoGrid+ | Dashboard</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1>🌐 EcoGrid+</h1>
+            <p>Plataforma Inteligente para Redes de Energia Sustentáveis</p>
+            <div class="status-indicator" id="status-indicator">
+                <span class="status-dot"></span>
+                <span id="status-text">Inicializando...</span>
+            </div>
+        </header>
+
+        <!-- Control Panel -->
+        <section class="control-panel">
+            <button onclick="initializeSystem()" class="btn btn-primary">
+                🚀 Inicializar Sistema
+            </button>
+            <button onclick="balanceNetwork()" class="btn btn-success">
+                ⚖️ Balancear Rede
+            </button>
+            <button onclick="optimizeNetwork()" class="btn btn-warning">
+                🔧 Otimizar Eficiência
+            </button>
+            <button onclick="trainML()" class="btn btn-info">
+                🤖 Treinar ML
+            </button>
+            <button onclick="refreshData()" class="btn btn-secondary">
+                🔄 Atualizar Dados
+            </button>
+            <button onclick="resetSystem()" class="btn btn-danger">
+                🔄 Resetar Sistema
+            </button>
+        </section>
+
+        <!-- Stats Cards -->
+        <section class="stats-grid">
+            <div class="stat-card">
+                <h3>Total de Nós</h3>
+                <div class="stat-value" id="total-nodes">-</div>
+                <span class="stat-label">na rede</span>
+            </div>
+            <div class="stat-card">
+                <h3>Carga Total</h3>
+                <div class="stat-value" id="total-load">-</div>
+                <span class="stat-label">kW</span>
+            </div>
+            <div class="stat-card">
+                <h3>Utilização</h3>
+                <div class="stat-value" id="utilization">-</div>
+                <span class="stat-label">%</span>
+            </div>
+            <div class="stat-card alert">
+                <h3>Nós Sobrecarregados</h3>
+                <div class="stat-value" id="overloaded-nodes">-</div>
+                <span class="stat-label">alertas</span>
+            </div>
+        </section>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Network Visualization -->
+            <section class="card card-large">
+                <h2>🗺️ Visualização da Rede</h2>
+                <div id="network-viz"></div>
+            </section>
+
+            <!-- Charts -->
+            <section class="card">
+                <h2>📊 Distribuição de Carga</h2>
+                <canvas id="load-chart"></canvas>
+            </section>
+
+            <section class="card">
+                <h2>📈 Previsão de Demanda (24h)</h2>
+                <canvas id="prediction-chart"></canvas>
+            </section>
+        </div>
+
+        <!-- Tabs -->
+        <section class="tabs">
+            <div class="tab-buttons">
+                <button class="tab-btn active" onclick="showTab('nodes')">Nós</button>
+                <button class="tab-btn" onclick="showTab('events')">Eventos</button>
+                <button class="tab-btn" onclick="showTab('routing')">Roteamento</button>
+                <button class="tab-btn" onclick="showTab('efficiency')">Eficiência</button>
+            </div>
+
+            <!-- Tab: Nodes -->
+            <div id="tab-nodes" class="tab-content active">
+                <h3>Lista de Nós</h3>
+                <div class="table-container">
+                    <table id="nodes-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Tipo</th>
+                                <th>Capacidade (kW)</th>
+                                <th>Carga Atual (kW)</th>
+                                <th>Utilização (%)</th>
+                                <th>Eficiência</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="nodes-tbody">
+                            <tr>
+                                <td colspan="7">Carregando...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Tab: Events -->
+            <div id="tab-events" class="tab-content">
+                <h3>Eventos Críticos</h3>
+                <div id="events-list" class="events-container">
+                    <p>Carregando eventos...</p>
+                </div>
+            </div>
+
+            <!-- Tab: Routing -->
+            <div id="tab-routing" class="tab-content">
+                <h3>Buscar Rota Ótima</h3>
+                <div class="form-group">
+                    <label>Origem:</label>
+                    <input type="text" id="route-source" placeholder="ex: SUB_0">
+
+                    <label>Destino:</label>
+                    <input type="text" id="route-destination" placeholder="ex: CONS_5">
+
+                    <label>Algoritmo:</label>
+                    <select id="route-algorithm">
+                        <option value="dijkstra">Dijkstra</option>
+                        <option value="astar">A*</option>
+                    </select>
+
+                    <button onclick="findRoute()" class="btn btn-primary">Buscar Rota</button>
+                </div>
+                <div id="route-result" class="result-container"></div>
+            </div>
+
+            <!-- Tab: Efficiency -->
+            <div id="tab-efficiency" class="tab-content">
+                <h3>Análise de Eficiência</h3>
+                <div id="efficiency-metrics" class="metrics-container">
+                    <div class="metric">
+                        <span class="metric-label">Eficiência Global:</span>
+                        <span class="metric-value" id="global-efficiency">-</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Perdas Totais:</span>
+                        <span class="metric-value" id="total-losses">-</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Pegada de Carbono:</span>
+                        <span class="metric-value" id="carbon-footprint">-</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Classificação:</span>
+                        <span class="metric-value" id="efficiency-class">-</span>
+                    </div>
+                </div>
+                <h4>Sugestões de Energia Renovável</h4>
+                <div id="renewable-suggestions"></div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer>
+            <p>EcoGrid+ v1.0 | Desenvolvido com Python, Flask, PyTorch e D3.js</p>
+            <p>© 2025 - Projeto Acadêmico de Estruturas de Dados Avançadas</p>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/api.js"></script>
+    <script src="js/network-viz.js"></script>
+    <script src="js/main.js"></script>
+</body>
+
+</html>
