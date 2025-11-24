@@ -52,23 +52,41 @@ function updateStatusIndicator(isHealthy) {
 // ==================== SYSTEM ACTIONS ====================
 
 async function initializeSystem() {
-  const btn = event.target;
-  btn.disabled = true;
-  btn.innerHTML = '<span class="loading"></span> Inicializando...';
-
-  try {
-    const result = await api.initialize(20, false);
-
-    if (result.success) {
-      showNotification("Sistema inicializado com sucesso!", "success");
-      await refreshData();
+    const btn = event.target;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="loading"></span> Inicializando...';
+    
+    try {
+        // Chama inicialização
+        const result = await api.initialize(20, false);
+        
+        if (result.success) {
+            showNotification('Sistema inicializado com sucesso!', 'success');
+            
+            // Atualiza IMEDIATAMENTE com os dados que vieram do /api/init
+            if (result.network_stats) {
+                updateStats({
+                    network: result.network_stats,
+                    avl_tree: result.avl_stats
+                });
+            }
+            
+            // Depois atualiza novamente para garantir dados frescos do banco
+            setTimeout(async () => {
+                await refreshData();
+            }, 3000);
+            
+            setTimeout(async () => {
+                await refreshData();
+                showNotification('Dados carregados!', 'info');
+            }, 5000);
+        }
+    } catch (error) {
+        showNotification('Erro ao inicializar sistema: ' + error.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '🚀 Inicializar Sistema';
     }
-  } catch (error) {
-    showNotification("Erro ao inicializar sistema: " + error.message, "error");
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = "🚀 Inicializar Sistema";
-  }
 }
 
 async function balanceNetwork() {
@@ -160,25 +178,94 @@ async function refreshData() {
     // Atualiza charts
     await updateCharts();
 
+    // Atualiza métricas de eficiência (se estiver na aba)
+    if (
+      document.getElementById("tab-efficiency").classList.contains("active")
+    ) {
+      updateEfficiencyTab();
+    }
+
     showNotification("Dados atualizados!", "info");
   } catch (error) {
     console.error("Erro ao atualizar dados:", error);
   }
 }
 
+async function simulateOverload() {
+  const btn = event.target;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loading"></span> Simulando...';
+
+  try {
+    const result = await api.request("/simulate-overload", {
+      method: "POST",
+      body: JSON.stringify({ num_nodes: 3 }),
+    });
+
+    if (result.success) {
+      showNotification(
+        `Sobrecarga simulada em ${result.nodes.length} nós!`,
+        "success"
+      );
+
+      // AGUARDA 1 segundo e atualiza DUAS vezes
+      setTimeout(async () => {
+        await refreshData();
+        setTimeout(async () => {
+          await refreshData();
+        }, 1000);
+      }, 1000);
+    }
+  } catch (error) {
+    showNotification("Erro ao simular: " + error.message, "error");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = "⚠️ Simular Sobrecarga";
+  }
+}
+
 // ==================== UI UPDATES ====================
 
 function updateStats(stats) {
-  document.getElementById("total-nodes").textContent =
-    stats.network.node_count || "-";
-  document.getElementById("total-load").textContent = stats.network.total_load
-    ? stats.network.total_load.toFixed(1)
-    : "-";
-  document.getElementById("utilization").textContent = stats.network.utilization
-    ? (stats.network.utilization * 100).toFixed(1)
-    : "-";
-  document.getElementById("overloaded-nodes").textContent =
-    stats.network.overloaded_nodes || "0";
+  console.log("Atualizando stats:", stats); // Debug
+
+  // Total de nós
+  const nodeCount = stats.network?.node_count || stats.avl_tree?.size || 0;
+  document.getElementById("total-nodes").textContent = nodeCount;
+
+  // Carga Total
+const totalLoad = stats.network?.total_load;
+if (totalLoad !== undefined && totalLoad !== null) {
+    // Mostra em kW (sem divisão) ou MW com verificação
+    document.getElementById("total-load").textContent = totalLoad.toFixed(1);
+} else {
+    document.getElementById("total-load").textContent = "-";
+}
+
+  // Utilização
+  const utilization = stats.network?.utilization;
+  if (utilization !== undefined) {
+    document.getElementById("utilization").textContent = (
+      utilization * 100
+    ).toFixed(1);
+  } else {
+    document.getElementById("utilization").textContent = "-";
+  }
+
+  // Nós Sobrecarregados
+  const overloaded = stats.network?.overloaded_nodes || 0;
+  document.getElementById("overloaded-nodes").textContent = overloaded;
+
+  // Atualiza métricas de eficiência se estiverem disponíveis
+  if (stats.efficiency) {
+    document.getElementById("global-efficiency").textContent =
+      stats.efficiency.global_efficiency?.toFixed(2) || "-";
+
+    document.getElementById("total-losses").textContent = stats.efficiency
+      .total_losses
+      ? stats.efficiency.total_losses.toFixed(2) + " kW"
+      : "-";
+  }
 }
 
 async function updateNodesTable() {
@@ -249,35 +336,125 @@ async function updateEvents() {
 }
 
 function updateEfficiencyMetrics(data) {
-    // Eficiência Global
-    const efficiency = data.efficiency || data.balancing?.efficiency;
-    document.getElementById('global-efficiency').textContent = 
-        efficiency?.global_efficiency ? efficiency.global_efficiency.toFixed(2) : '-';
-    
-    // Perdas Totais
-    document.getElementById('total-losses').textContent = 
-        efficiency?.total_losses ? efficiency.total_losses.toFixed(2) + ' kW' : '-';
-    
-    // Pegada de Carbono
-    document.getElementById('carbon-footprint').textContent = 
-        data.carbon_footprint?.total_co2_kg ? data.carbon_footprint.total_co2_kg.toFixed(2) + ' kg' : '-';
-    
-    // Classificação
-    document.getElementById('efficiency-class').textContent = 
-        data.carbon_footprint?.efficiency_class || '-';
-    
-    // Sugestões de energia renovável
-    const suggestionsDiv = document.getElementById('renewable-suggestions');
-    if (data.renewable_suggestions && data.renewable_suggestions.length > 0) {
-        suggestionsDiv.innerHTML = data.renewable_suggestions.map(s => `
-            <div class="metric">
-                <span class="metric-label">Nó ${s.node_id}:</span>
-                <span class="metric-value">${s.recommended_source}</span>
+  // Eficiência Global
+  const efficiency = data.efficiency || data.balancing?.efficiency;
+  document.getElementById("global-efficiency").textContent =
+    efficiency?.global_efficiency
+      ? efficiency.global_efficiency.toFixed(2)
+      : "-";
+
+  // Perdas Totais
+  document.getElementById("total-losses").textContent = efficiency?.total_losses
+    ? efficiency.total_losses.toFixed(2) + " kW"
+    : "-";
+
+  // Pegada de Carbono
+  document.getElementById("carbon-footprint").textContent = data
+    .carbon_footprint?.total_co2_kg
+    ? data.carbon_footprint.total_co2_kg.toFixed(2) + " kg"
+    : "-";
+
+  // Classificação
+  document.getElementById("efficiency-class").textContent =
+    data.carbon_footprint?.efficiency_class || "-";
+
+  // Sugestões de energia renovável
+  const suggestionsDiv = document.getElementById("renewable-suggestions");
+  const suggestions = data.renewable_suggestions;
+
+  if (suggestions && suggestions.length > 0) {
+    suggestionsDiv.innerHTML = suggestions
+      .map(
+        (s) => `
+            <div class="metric" style="margin-bottom: 10px; padding: 10px; background: white; border-radius: 8px; border-left: 4px solid #10b981;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <span class="metric-label" style="display: block; font-size: 12px; color: #6b7280;">
+                            Nó ${s.node_id} (Score: ${(s.score * 100).toFixed(
+          0
+        )}%)
+                        </span>
+                        <span class="metric-value" style="display: block; font-size: 16px; font-weight: 600; color: #10b981;">
+                            ${s.recommended_source
+                              .replace("_", " ")
+                              .toUpperCase()}
+                        </span>
+                    </div>
+                    <div style="text-align: right; font-size: 12px; color: #6b7280;">
+                        <div>Carga: ${s.current_load.toFixed(0)} kW</div>
+                        <div>Redução CO₂: ~${s.estimated_reduction_co2_kg.toFixed(
+                          0
+                        )} kg</div>
+                    </div>
+                </div>
             </div>
-        `).join('');
-    } else {
-        suggestionsDiv.innerHTML = '<p>Nenhuma sugestão disponível no momento.</p>';
+        `
+      )
+      .join("");
+  } else {
+    suggestionsDiv.innerHTML =
+      '<p style="color: #6b7280; font-size: 14px;">Nenhuma sugestão disponível no momento. Execute "Otimizar Eficiência" primeiro.</p>';
+  }
+}
+
+async function updateEfficiencyTab() {
+  try {
+    const stats = await api.getStats();
+
+    if (!stats.stats || !stats.stats.efficiency) {
+      console.warn("Sem dados de eficiência");
+      return;
     }
+
+    const efficiency = stats.stats.efficiency;
+
+    // Eficiência Global
+    document.getElementById("global-efficiency").textContent =
+      efficiency.global_efficiency
+        ? efficiency.global_efficiency.toFixed(2)
+        : "-";
+
+    // Perdas Totais
+    document.getElementById("total-losses").textContent =
+      efficiency.total_losses
+        ? efficiency.total_losses.toFixed(2) + " kW"
+        : "-";
+
+    // Pegada de Carbono - via endpoint de otimização
+    const optimizeData = await api.optimizeEfficiency();
+
+    if (optimizeData.success && optimizeData.carbon_footprint) {
+      document.getElementById("carbon-footprint").textContent =
+        optimizeData.carbon_footprint.total_co2_kg.toFixed(2) + " kg";
+
+      document.getElementById("efficiency-class").textContent =
+        optimizeData.carbon_footprint.efficiency_class || "-";
+
+      // Sugestões renováveis
+      const suggestionsDiv = document.getElementById("renewable-suggestions");
+      if (
+        optimizeData.renewable_suggestions &&
+        optimizeData.renewable_suggestions.length > 0
+      ) {
+        suggestionsDiv.innerHTML = optimizeData.renewable_suggestions
+          .slice(0, 5)
+          .map(
+            (s) => `
+                    <div class="metric">
+                        <span class="metric-label">Nó ${s.node_id}:</span>
+                        <span class="metric-value">${s.recommended_source.replace(
+                          "_",
+                          " "
+                        )}</span>
+                    </div>
+                `
+          )
+          .join("");
+      }
+    }
+  } catch (error) {
+    console.error("Erro ao atualizar aba de eficiência:", error);
+  }
 }
 
 // ==================== CHARTS ====================
@@ -353,18 +530,21 @@ async function updateCharts() {
     loadChart.data.datasets[1].data = top10.map((n) => n.data.capacity);
     loadChart.update();
 
-    // Atualiza gráfico de previsão
-    if (top10.length > 0) {
-      const prediction = await api.predictDemand(top10[0].key, 24);
-
-      predictionChart.data.labels = prediction.predictions.map(
-        (p, i) => `+${i + 1}h`
-      );
-      predictionChart.data.datasets[0].data = prediction.predictions.map(
-        (p) => p.predicted_load
-      );
-      predictionChart.update();
-    }
+    // NÃO atualiza gráfico de previsão se ML não está treinado
+    // Comenta ou remove esta parte:
+    /*
+        if (top10.length > 0) {
+            try {
+                const prediction = await api.predictDemand(top10[0].key, 24);
+                predictionChart.data.labels = prediction.predictions.map((p, i) => `+${i+1}h`);
+                predictionChart.data.datasets[0].data = prediction.predictions.map(p => p.predicted_load);
+                predictionChart.update();
+            } catch (error) {
+                console.warn('ML não disponível:', error.message);
+                // Não faz nada, só ignora
+            }
+        }
+            */
   } catch (error) {
     console.error("Erro ao atualizar gráficos:", error);
   }
@@ -409,42 +589,53 @@ async function resetSystem() {
 }
 
 async function findRoute() {
-    const source = document.getElementById('route-source').value;
-    const destination = document.getElementById('route-destination').value;
-    const algorithm = document.getElementById('route-algorithm').value;
-    
-    if (!source || !destination) {
-        showNotification('Preencha origem e destino', 'error');
-        return;
-    }
-    
-    try {
-        const result = await api.findRoute(source, destination, algorithm);
-        
-        const resultDiv = document.getElementById('route-result');
-        
-        // Verifica se encontrou rota
-        if (result.success && result.route.path && result.route.path.length > 0) {
-            // Formata custo (pode ser null se Infinity)
-            const costText = result.route.cost !== null ? result.route.cost.toFixed(4) : 'Infinito (sem rota direta)';
-            const lossText = result.route.power_loss ? result.route.power_loss.toFixed(2) : 'N/A';
-            
-            resultDiv.innerHTML = `
+  const source = document.getElementById("route-source").value;
+  const destination = document.getElementById("route-destination").value;
+  const algorithm = document.getElementById("route-algorithm").value;
+
+  if (!source || !destination) {
+    showNotification("Preencha origem e destino", "error");
+    return;
+  }
+
+  try {
+    const result = await api.findRoute(source, destination, algorithm);
+
+    const resultDiv = document.getElementById("route-result");
+
+    // Verifica se encontrou rota
+    if (result.success && result.route.path && result.route.path.length > 0) {
+      // Formata custo (pode ser null se Infinity)
+      const costText =
+        result.route.cost !== null
+          ? result.route.cost.toFixed(4)
+          : "Infinito (sem rota direta)";
+      const lossText = result.route.power_loss
+        ? result.route.power_loss.toFixed(2)
+        : "N/A";
+
+      resultDiv.innerHTML = `
                 <h4>✅ Rota Encontrada</h4>
-                <p><strong>Caminho:</strong> ${result.route.path.join(' → ')}</p>
+                <p><strong>Caminho:</strong> ${result.route.path.join(
+                  " → "
+                )}</p>
                 <p><strong>Custo:</strong> ${costText}</p>
                 <p><strong>Saltos:</strong> ${result.route.hops}</p>
                 <p><strong>Perda de Potência:</strong> ${lossText} kW</p>
-                <p><strong>Tempo de Execução:</strong> ${(result.route.execution_time * 1000).toFixed(2)} ms</p>
+                <p><strong>Tempo de Execução:</strong> ${(
+                  result.route.execution_time * 1000
+                ).toFixed(2)} ms</p>
             `;
-        } else {
-            resultDiv.innerHTML = '<p class="error">❌ Rota não encontrada ou nós desconectados</p>';
-        }
-    } catch (error) {
-        console.error('Erro completo:', error);
-        showNotification('Erro ao buscar rota: ' + error.message, 'error');
-        document.getElementById('route-result').innerHTML = '<p class="error">❌ Erro ao buscar rota</p>';
+    } else {
+      resultDiv.innerHTML =
+        '<p class="error">❌ Rota não encontrada ou nós desconectados</p>';
     }
+  } catch (error) {
+    console.error("Erro completo:", error);
+    showNotification("Erro ao buscar rota: " + error.message, "error");
+    document.getElementById("route-result").innerHTML =
+      '<p class="error">❌ Erro ao buscar rota</p>';
+  }
 }
 
 // ==================== TABS ====================
