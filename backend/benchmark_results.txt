@@ -1,0 +1,23 @@
+EcoGrid+ Performance Benchmark
+==================================================
+
+AVL Insert:
+  100 nodes: 0.0005s
+  500 nodes: 0.0038s
+  1000 nodes: 0.0076s
+  5000 nodes: 0.0607s
+  10000 nodes: 0.1028s
+
+AVL Search:
+  100 nodes: 0.0000s
+  500 nodes: 0.0002s
+  1000 nodes: 0.0005s
+  5000 nodes: 0.0011s
+  10000 nodes: 0.0017s
+
+Dijkstra:
+  10 nodes: 0.0001s
+  50 nodes: 0.0004s
+  100 nodes: 0.0006s
+  200 nodes: 0.0008s
+  500 nodes: 0.0024s
