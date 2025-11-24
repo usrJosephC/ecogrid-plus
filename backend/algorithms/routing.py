@@ -15,7 +15,7 @@ class EnergyRouter:
     def find_optimal_route(self, source, destination, algorithm='dijkstra'):
         """
         Encontra rota ótima considerando perdas e eficiência.
-        Retorna: (caminho, custo total, tempo de execução)
+        Retorna: dict com caminho, custo, tempo de execução
         """
         import time
         
@@ -25,30 +25,47 @@ class EnergyRouter:
         
         start_time = time.time()
         
-        if algorithm == 'dijkstra':
-            path, cost = self.graph.dijkstra(source, destination)
-        elif algorithm == 'astar':
-            path, cost = self.graph.astar(source, destination)
-        else:
-            raise ValueError(f"Algoritmo desconhecido: {algorithm}")
-        
-        execution_time = time.time() - start_time
-
-        if cost == float('inf'):
-            cost = None
-        
-        result = {
-            'path': path,
-            'cost': cost,
-            'algorithm': algorithm,
-            'execution_time': execution_time,
-            'hops': len(path) - 1 if path else 0
-        }
-        
-        self.routing_cache[cache_key] = result
-        self.route_history.append(result)
-        
-        return result
+        try:
+            if algorithm == 'dijkstra':
+                path, cost = self.graph.dijkstra(source, destination)
+            elif algorithm == 'astar':
+                path, cost = self.graph.astar(source, destination)
+            else:
+                raise ValueError(f"Algoritmo desconhecido: {algorithm}")
+            
+            execution_time = time.time() - start_time
+            
+            # CORREÇÃO: Converte Infinity para None
+            if cost == float('inf'):
+                cost = None
+            
+            result = {
+                'path': path if path else [],
+                'cost': cost,
+                'algorithm': algorithm,
+                'execution_time': execution_time,
+                'hops': len(path) - 1 if path else 0,
+                'found': len(path) > 0  # ← ADICIONA FLAG
+            }
+            
+            if result['found']:
+                self.routing_cache[cache_key] = result
+                self.route_history.append(result)
+            
+            return result
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return {
+                'path': [],
+                'cost': None,
+                'algorithm': algorithm,
+                'execution_time': 0,
+                'hops': 0,
+                'found': False,
+                'error': str(e)
+            }
     
     def find_redundant_paths(self, source, destination, k=3):
         """

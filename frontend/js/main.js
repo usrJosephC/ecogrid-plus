@@ -113,29 +113,29 @@ async function balanceNetwork() {
 }
 
 async function optimizeNetwork() {
-  const btn = event.target;
-  btn.disabled = true;
-  btn.innerHTML = '<span class="loading"></span> Otimizando...';
-
-  try {
-    const result = await api.optimizeEfficiency();
-
-    if (result.success) {
-      showNotification(
-        `Otimização concluída! ${result.optimization.optimizations_performed} operações realizadas.`,
-        "success"
-      );
-
-      // Atualiza métricas de eficiência
-      updateEfficiencyMetrics(result);
-      await refreshData();
+    const btn = event.target;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="loading"></span> Otimizando...';
+    
+    try {
+        const result = await api.optimizeEfficiency();
+        
+        if (result.success) {
+            showNotification(
+                `Otimização concluída! ${result.optimization.optimizations_performed} operações realizadas.`,
+                'success'
+            );
+            
+            // CHAMA A FUNÇÃO AQUI!
+            updateEfficiencyMetrics(result);
+            await refreshData();
+        }
+    } catch (error) {
+        showNotification('Erro na otimização: ' + error.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '🔧 Otimizar Eficiência';
     }
-  } catch (error) {
-    showNotification("Erro na otimização: " + error.message, "error");
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = "🔧 Otimizar Eficiência";
-  }
 }
 
 async function trainML() {
@@ -305,96 +305,152 @@ async function updateNodesTable() {
 }
 
 async function updateEvents() {
-  try {
-    const eventsData = await api.getCriticalEvents();
-    const container = document.getElementById("events-list");
-
-    if (eventsData.count === 0) {
-      container.innerHTML = "<p>Nenhum evento crítico no momento.</p>";
-      return;
-    }
-
-    container.innerHTML = eventsData.events
-      .map(
-        (event) => `
-            <div class="event-item ${
-              event.priority <= 2 ? "critical" : "high"
-            }">
-                <div class="event-title">${event.type.toUpperCase()} - Nó: ${
-          event.node_id
-        }</div>
-                <div class="event-details">Prioridade: ${
-                  event.priority
-                } | ${JSON.stringify(event.data)}</div>
+    try {
+        const eventsData = await api.getCriticalEvents();
+        const container = document.getElementById('events-list');
+        
+        if (!eventsData.events || eventsData.count === 0) {
+            container.innerHTML = `
+                <div style="text-align: center; padding: 40px; color: #6b7280;">
+                    <div style="font-size: 48px; margin-bottom: 16px;">✅</div>
+                    <h3 style="margin: 0; color: #374151;">Nenhum Evento Crítico</h3>
+                    <p style="margin: 8px 0 0 0; font-size: 14px;">A rede está operando normalmente.</p>
+                </div>
+            `;
+            return;
+        }
+        
+        // Agrupa eventos por prioridade
+        const critical = eventsData.events.filter(e => e.priority <= 2);
+        const high = eventsData.events.filter(e => e.priority === 3);
+        const medium = eventsData.events.filter(e => e.priority >= 4);
+        
+        let html = '';
+        
+        // Eventos Críticos
+        if (critical.length > 0) {
+            html += '<h4 style="color: #ef4444; margin: 0 0 12px 0;">🔴 Críticos</h4>';
+            critical.forEach(event => {
+                html += `
+                    <div class="event-item critical" style="background: #fee2e2; border-left: 4px solid #ef4444; padding: 12px; margin-bottom: 8px; border-radius: 6px;">
+                        <div style="font-weight: 600; color: #991b1b; margin-bottom: 4px;">
+                            ${event.type.toUpperCase()} - Nó: ${event.node_id}
+                        </div>
+                        <div style="font-size: 13px; color: #7f1d1d;">
+                            Prioridade: ${event.priority} | ${JSON.stringify(event.data)}
+                        </div>
+                    </div>
+                `;
+            });
+        }
+        
+        // Eventos Altos
+        if (high.length > 0) {
+            html += '<h4 style="color: #f59e0b; margin: 16px 0 12px 0;">🟠 Altos</h4>';
+            high.forEach(event => {
+                html += `
+                    <div class="event-item high" style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 12px; margin-bottom: 8px; border-radius: 6px;">
+                        <div style="font-weight: 600; color: #92400e; margin-bottom: 4px;">
+                            ${event.type.toUpperCase()} - Nó: ${event.node_id}
+                        </div>
+                        <div style="font-size: 13px; color: #78350f;">
+                            Prioridade: ${event.priority} | ${JSON.stringify(event.data)}
+                        </div>
+                    </div>
+                `;
+            });
+        }
+        
+        // Eventos Médios
+        if (medium.length > 0) {
+            html += '<h4 style="color: #3b82f6; margin: 16px 0 12px 0;">🟡 Médios</h4>';
+            medium.forEach(event => {
+                html += `
+                    <div class="event-item medium" style="background: #dbeafe; border-left: 4px solid #3b82f6; padding: 12px; margin-bottom: 8px; border-radius: 6px;">
+                        <div style="font-weight: 600; color: #1e40af; margin-bottom: 4px;">
+                            ${event.type.toUpperCase()} - Nó: ${event.node_id}
+                        </div>
+                        <div style="font-size: 13px; color: #1e3a8a;">
+                            Prioridade: ${event.priority} | ${JSON.stringify(event.data)}
+                        </div>
+                    </div>
+                `;
+            });
+        }
+        
+        container.innerHTML = html;
+        
+    } catch (error) {
+        console.error('Erro ao atualizar eventos:', error);
+        document.getElementById('events-list').innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #ef4444;">
+                <div style="font-size: 48px; margin-bottom: 16px;">⚠️</div>
+                <h3 style="margin: 0;">Erro ao Carregar Eventos</h3>
+                <p style="margin: 8px 0 0 0; font-size: 14px;">${error.message}</p>
             </div>
-        `
-      )
-      .join("");
-  } catch (error) {
-    console.error("Erro ao atualizar eventos:", error);
-  }
+        `;
+    }
 }
 
 function updateEfficiencyMetrics(data) {
-  // Eficiência Global
-  const efficiency = data.efficiency || data.balancing?.efficiency;
-  document.getElementById("global-efficiency").textContent =
-    efficiency?.global_efficiency
-      ? efficiency.global_efficiency.toFixed(2)
-      : "-";
-
-  // Perdas Totais
-  document.getElementById("total-losses").textContent = efficiency?.total_losses
-    ? efficiency.total_losses.toFixed(2) + " kW"
-    : "-";
-
-  // Pegada de Carbono
-  document.getElementById("carbon-footprint").textContent = data
-    .carbon_footprint?.total_co2_kg
-    ? data.carbon_footprint.total_co2_kg.toFixed(2) + " kg"
-    : "-";
-
-  // Classificação
-  document.getElementById("efficiency-class").textContent =
-    data.carbon_footprint?.efficiency_class || "-";
-
-  // Sugestões de energia renovável
-  const suggestionsDiv = document.getElementById("renewable-suggestions");
-  const suggestions = data.renewable_suggestions;
-
-  if (suggestions && suggestions.length > 0) {
-    suggestionsDiv.innerHTML = suggestions
-      .map(
-        (s) => `
-            <div class="metric" style="margin-bottom: 10px; padding: 10px; background: white; border-radius: 8px; border-left: 4px solid #10b981;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
+    // Eficiência Global
+    const efficiency = data.efficiency || data.balancing?.efficiency;
+    document.getElementById('global-efficiency').textContent = 
+        efficiency?.global_efficiency ? efficiency.global_efficiency.toFixed(2) : '-';
+    
+    // Perdas Totais
+    document.getElementById('total-losses').textContent = 
+        efficiency?.total_losses ? efficiency.total_losses.toFixed(2) + ' kW' : '-';
+    
+    // Pegada de Carbono
+    document.getElementById('carbon-footprint').textContent = 
+        data.carbon_footprint?.total_co2_kg ? data.carbon_footprint.total_co2_kg.toFixed(2) + ' kg' : '-';
+    
+    // Classificação
+    document.getElementById('efficiency-class').textContent = 
+        data.carbon_footprint?.efficiency_class || '-';
+    
+    // Sugestões de energia renovável - VERSÃO COMPLETA
+    const suggestionsDiv = document.getElementById('renewable-suggestions');
+    const suggestions = data.renewable_suggestions;
+    
+    if (suggestions && suggestions.length > 0) {
+        suggestionsDiv.innerHTML = suggestions.map(s => `
+            <div style="margin-bottom: 15px; padding: 15px; background: white; border-radius: 10px; border-left: 5px solid #10b981; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                     <div>
-                        <span class="metric-label" style="display: block; font-size: 12px; color: #6b7280;">
-                            Nó ${s.node_id} (Score: ${(s.score * 100).toFixed(
-          0
-        )}%)
-                        </span>
-                        <span class="metric-value" style="display: block; font-size: 16px; font-weight: 600; color: #10b981;">
-                            ${s.recommended_source
-                              .replace("_", " ")
-                              .toUpperCase()}
-                        </span>
+                        <div style="font-size: 12px; color: #6b7280; font-weight: 500;">
+                            Nó ${s.node_id}
+                        </div>
+                        <div style="font-size: 18px; font-weight: 700; color: #10b981; text-transform: uppercase;">
+                            ${s.recommended_source.replace('_', ' ')}
+                        </div>
                     </div>
-                    <div style="text-align: right; font-size: 12px; color: #6b7280;">
-                        <div>Carga: ${s.current_load.toFixed(0)} kW</div>
-                        <div>Redução CO₂: ~${s.estimated_reduction_co2_kg.toFixed(
-                          0
-                        )} kg</div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 14px; color: #059669; font-weight: 600;">
+                            Score: ${(s.score * 100).toFixed(0)}%
+                        </div>
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding-top: 10px; border-top: 1px solid #e5e7eb;">
+                    <div style="text-align: center;">
+                        <div style="font-size: 11px; color: #6b7280;">Carga Atual</div>
+                        <div style="font-size: 14px; font-weight: 600; color: #374151;">${s.current_load.toFixed(0)} kW</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="font-size: 11px; color: #6b7280;">Eficiência</div>
+                        <div style="font-size: 14px; font-weight: 600; color: #374151;">${(s.efficiency * 100).toFixed(0)}%</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="font-size: 11px; color: #6b7280;">Redução CO₂</div>
+                        <div style="font-size: 14px; font-weight: 600; color: #059669;">~${s.estimated_reduction_co2_kg.toFixed(0)} kg</div>
                     </div>
                 </div>
             </div>
-        `
-      )
-      .join("");
-  } else {
-    suggestionsDiv.innerHTML =
-      '<p style="color: #6b7280; font-size: 14px;">Nenhuma sugestão disponível no momento. Execute "Otimizar Eficiência" primeiro.</p>';
-  }
+        `).join('');
+    } else {
+        suggestionsDiv.innerHTML = '<p style="color: #6b7280; font-size: 14px; padding: 20px; text-align: center; background: #f9fafb; border-radius: 8px;">Nenhuma sugestão disponível. Execute "Otimizar Eficiência" primeiro.</p>';
+    }
 }
 
 async function updateEfficiencyTab() {
@@ -520,34 +576,42 @@ function initCharts() {
 }
 
 async function updateCharts() {
-  try {
-    // Atualiza gráfico de carga
-    const nodesData = await api.getNodes();
-    const top10 = nodesData.nodes.slice(0, 10);
-
-    loadChart.data.labels = top10.map((n) => n.key);
-    loadChart.data.datasets[0].data = top10.map((n) => n.data.current_load);
-    loadChart.data.datasets[1].data = top10.map((n) => n.data.capacity);
-    loadChart.update();
-
-    // NÃO atualiza gráfico de previsão se ML não está treinado
-    // Comenta ou remove esta parte:
-    /*
+    try {
+        // Atualiza gráfico de carga
+        const nodesData = await api.getNodes();
+        const top10 = nodesData.nodes.slice(0, 10);
+        
+        loadChart.data.labels = top10.map(n => n.key);
+        loadChart.data.datasets[0].data = top10.map(n => n.data.current_load);
+        loadChart.data.datasets[1].data = top10.map(n => n.data.capacity);
+        loadChart.update();
+        
+        // Atualiza gráfico de previsão com DADOS SINTÉTICOS
         if (top10.length > 0) {
-            try {
-                const prediction = await api.predictDemand(top10[0].key, 24);
-                predictionChart.data.labels = prediction.predictions.map((p, i) => `+${i+1}h`);
-                predictionChart.data.datasets[0].data = prediction.predictions.map(p => p.predicted_load);
-                predictionChart.update();
-            } catch (error) {
-                console.warn('ML não disponível:', error.message);
-                // Não faz nada, só ignora
+            const baseLoad = top10[0].data.current_load;
+            const predictions = [];
+            
+            // Gera curva de demanda típica (sobe durante o dia, desce à noite)
+            for (let h = 1; h <= 24; h++) {
+                let factor = 1.0;
+                
+                // Padrão de consumo: pico às 18h, mínimo às 3h
+                if (h >= 6 && h <= 9) factor = 1.3;      // Manhã: +30%
+                else if (h >= 12 && h <= 14) factor = 1.2; // Almoço: +20%
+                else if (h >= 18 && h <= 21) factor = 1.5; // Noite: +50% (pico)
+                else if (h >= 22 || h <= 5) factor = 0.7;  // Madrugada: -30%
+                
+                predictions.push(baseLoad * factor);
             }
+            
+            predictionChart.data.labels = Array.from({length: 24}, (_, i) => `+${i+1}h`);
+            predictionChart.data.datasets[0].data = predictions;
+            predictionChart.update();
         }
-            */
-  } catch (error) {
-    console.error("Erro ao atualizar gráficos:", error);
-  }
+        
+    } catch (error) {
+        console.error('Erro ao atualizar gráficos:', error);
+    }
 }
 
 // ==================== ROUTING ====================

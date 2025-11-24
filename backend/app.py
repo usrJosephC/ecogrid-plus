@@ -456,18 +456,42 @@ def balance_network():
         result = load_balancer.balance_network()
         efficiency = load_balancer.calculate_efficiency()
         
+        # LIMPA EVENTOS DE SOBRECARGA após balanceamento
+        # Remove eventos do heap
+        cleared_events = []
+        while priority_heap.size() > 0:
+            event = priority_heap.pop()
+            if event.event_type == 'overload':
+                cleared_events.append(event.node_id)
+            else:
+                # Mantém eventos que não são de sobrecarga
+                priority_heap.push(event.event_type, event.node_id, event.data, event.priority)
+        
+        # Limpa fila de eventos de sobrecarga
+        # (Recria fila sem eventos de overload)
+        old_queue = list(event_queue.queue)
+        event_queue.queue.clear()
+        for event in old_queue:
+            if event.event_type != 'overload':
+                event_queue.enqueue(event)
+        
         app_state['last_balance'] = datetime.now().isoformat()
         app_state['total_operations'] += result['balanced']
+        
+        logger.info(f"✅ Balanceamento concluído. {len(cleared_events)} eventos limpos.")
         
         return jsonify({
             'success': True,
             'balancing': result,
             'efficiency': efficiency,
+            'events_cleared': len(cleared_events),
             'timestamp': datetime.now().isoformat()
         }), 200
         
     except Exception as e:
         logger.error(f"❌ Erro no balanceamento: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/balance/stats', methods=['GET'])
@@ -757,14 +781,33 @@ def simulate_overload():
             
             avl_tree.insert(node_id, node_data)
             energy_graph.update_load(node_id, new_load)
+            
+            # CRIA EVENTOS DE SOBRECARGA
+            event_data = {
+                'load': new_load,
+                'capacity': node_data['capacity'],
+                'utilization': new_load / node_data['capacity']
+            }
+            
+            # Adiciona ao heap de prioridade (CRÍTICO)
+            priority_heap.push('overload', node_id, event_data, Priority.HIGH)
+            
+            # Adiciona à fila de eventos
+            event_queue.enqueue(QueueEvent('overload', node_id, event_data, priority=2))
+            
+            logger.warning(f"⚠️ Sobrecarga simulada em {node_id}: {new_load:.1f} kW / {node_data['capacity']:.1f} kW")
         
         return jsonify({
             'success': True,
             'message': f'{len(selected)} nós sobrecarregados para teste',
-            'nodes': [n['key'] for n in selected]
+            'nodes': [n['key'] for n in selected],
+            'events_created': len(selected)
         }), 200
         
     except Exception as e:
+        logger.error(f"Erro ao simular sobrecarga: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/stats', methods=['GET'])
