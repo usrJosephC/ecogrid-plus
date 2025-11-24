@@ -98,7 +98,7 @@ ecogrid-plus/
 ### Opção 1: Docker (Recomendado)
 - Clone o repositório
 ```bash
-git clone https://github.com/seu-usuario/ecogrid-plus.git
+git clone https://github.com/usrJosephC/ecogrid-plus.git
 cd ecogrid-plus
 ```
 
