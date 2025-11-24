@@ -1,81 +1,76 @@
 """
-Grafo ponderado para modelagem da rede elétrica.
-Suporta múltiplas rotas e detecção de falhas.
+Grafo direcionado para representar a rede elétrica.
+Usa lista de adjacências otimizada.
 """
 
-import heapq
-from collections import defaultdict, deque
 
 class EnergyGraph:
     def __init__(self):
-        self.nodes = {}  # node_id -> {type, capacity, current_load, ...}
-        self.edges = defaultdict(list)  # node_id -> [(neighbor, weight, line_data)]
-        self.node_count = 0
-        self.edge_count = 0
+        self.nodes = {}  # {node_id: {type, capacity, current_load, efficiency}}
+        self.edges = {}  # {node_id: [(neighbor_id, weight, line_data)]}
     
-    def add_node(self, node_id, node_type, capacity, efficiency=1.0):
-        """
-        Adiciona nó à rede
-        node_type: 'substation', 'transformer', 'consumer'
-        """
+    def add_node(self, node_id, node_type, capacity, efficiency=1.0, current_load=0):
+        """Adiciona nó ao grafo - O(1)"""
         self.nodes[node_id] = {
             'type': node_type,
             'capacity': capacity,
-            'current_load': 0,
-            'efficiency': efficiency,
-            'status': 'active',  # 'active', 'overloaded', 'failed'
-            'voltage': 220.0,
-            'connections': 0
+            'current_load': current_load,
+            'efficiency': efficiency
         }
-        self.node_count += 1
+        
+        # Inicializa lista de edges se ainda não existir
+        if node_id not in self.edges:
+            self.edges[node_id] = []
     
-    def add_edge(self, from_node, to_node, distance, resistance=0.1):
-        """
-        Adiciona linha de transmissão (aresta)
-        weight = perda energética (distance * resistance)
-        """
-        weight = distance * resistance
+    def add_edge(self, from_node, to_node, distance, resistance=0.1, status='active'):
+        """Adiciona aresta bidirecional - O(1)"""
+        # Verifica se os nós existem
+        if from_node not in self.nodes or to_node not in self.nodes:
+            raise ValueError(f"Nós {from_node} ou {to_node} não existem")
+        
+        # Calcula peso (considera distância e resistência)
+        weight = distance * (1 + resistance)
+        
         line_data = {
             'distance': distance,
             'resistance': resistance,
-            'capacity': 1000,  # kW
-            'status': 'active'
+            'status': status,
+            'capacity': 1000  # Capacidade da linha
         }
         
-        # Grafo não direcionado
+        # Adiciona aresta bidirecional
+        if from_node not in self.edges:
+            self.edges[from_node] = []
+        if to_node not in self.edges:
+            self.edges[to_node] = []
+        
         self.edges[from_node].append((to_node, weight, line_data))
         self.edges[to_node].append((from_node, weight, line_data))
-        
-        self.nodes[from_node]['connections'] += 1
-        self.nodes[to_node]['connections'] += 1
-        self.edge_count += 1
     
-    def update_load(self, node_id, load):
-        """Atualiza carga atual do nó"""
+    def update_load(self, node_id, new_load):
+        """Atualiza carga de um nó - O(1)"""
         if node_id in self.nodes:
-            self.nodes[node_id]['current_load'] = load
-            
-            # Atualiza status
-            capacity = self.nodes[node_id]['capacity']
-            if load > capacity:
-                self.nodes[node_id]['status'] = 'overloaded'
-            elif load > capacity * 0.9:
-                self.nodes[node_id]['status'] = 'warning'
-            else:
-                self.nodes[node_id]['status'] = 'active'
+            self.nodes[node_id]['current_load'] = new_load
     
-    def dijkstra(self, start, end):
+    def get_neighbors(self, node_id):
+        """Retorna vizinhos de um nó - O(1)"""
+        return self.edges.get(node_id, [])
+    
+    def dijkstra(self, source, destination):
         """
-        Algoritmo de Dijkstra para caminho de menor perda
-        Complexidade: O(E log V)
+        Algoritmo de Dijkstra para caminho mais curto.
+        Complexidade: O((V + E) log V)
         """
-        if start not in self.nodes or end not in self.nodes:
-            return None, float('inf')
+        import heapq
         
+        if source not in self.nodes or destination not in self.nodes:
+            return [], float('inf')
+        
+        # Inicialização
         distances = {node: float('inf') for node in self.nodes}
-        distances[start] = 0
+        distances[source] = 0
         previous = {node: None for node in self.nodes}
-        pq = [(0, start)]
+        pq = [(0, source)]
         visited = set()
         
         while pq:
@@ -86,12 +81,12 @@ class EnergyGraph:
             
             visited.add(current)
             
-            if current == end:
+            if current == destination:
                 break
             
-            for neighbor, weight, line_data in self.edges[current]:
+            for neighbor, weight, line_data in self.edges.get(current, []):
                 if line_data['status'] != 'active':
-                    continue  # Ignora linhas com falha
+                    continue
                 
                 distance = current_dist + weight
                 
@@ -102,126 +97,112 @@ class EnergyGraph:
         
         # Reconstrói caminho
         path = []
-        current = end
-        while current:
-            path.append(current)
-            current = previous[current]
-        path.reverse()
+        current = destination
         
-        if path[0] != start:
-            return None, float('inf')
+        if previous[current] is not None or current == source:
+            while current is not None:
+                path.insert(0, current)
+                current = previous[current]
         
-        return path, distances[end]
+        return path, distances[destination]
     
-    def astar(self, start, end):
+    def astar(self, source, destination):
         """
-        Algoritmo A* com heurística de distância euclidiana
-        Complexidade: O(E log V)
+        Algoritmo A* com heurística baseada em tipo de nó.
+        Complexidade: O((V + E) log V)
         """
-        def heuristic(node1, node2):
-            # Heurística simplificada: assume perda proporcional à carga
-            load1 = self.nodes[node1]['current_load']
-            load2 = self.nodes[node2]['current_load']
-            return abs(load1 - load2) * 0.01
+        import heapq
         
-        if start not in self.nodes or end not in self.nodes:
-            return None, float('inf')
+        if source not in self.nodes or destination not in self.nodes:
+            return [], float('inf')
         
-        open_set = [(0, start)]
-        came_from = {}
+        def heuristic(node):
+            """Heurística: prioriza nós mais eficientes"""
+            node_data = self.nodes[node]
+            base_h = 1.0
+            
+            # Penaliza nós com baixa eficiência
+            if node_data['efficiency'] < 0.85:
+                base_h *= 1.2
+            
+            # Penaliza nós sobrecarregados
+            utilization = node_data['current_load'] / node_data['capacity']
+            if utilization > 0.8:
+                base_h *= 1.5
+            
+            return base_h
+        
+        # Inicialização
         g_score = {node: float('inf') for node in self.nodes}
-        g_score[start] = 0
-        f_score = {node: float('inf') for node in self.nodes}
-        f_score[start] = heuristic(start, end)
+        g_score[source] = 0
         
-        while open_set:
-            _, current = heapq.heappop(open_set)
+        f_score = {node: float('inf') for node in self.nodes}
+        f_score[source] = heuristic(source)
+        
+        previous = {node: None for node in self.nodes}
+        pq = [(f_score[source], source)]
+        visited = set()
+        
+        while pq:
+            _, current = heapq.heappop(pq)
             
-            if current == end:
-                path = []
-                while current in came_from:
-                    path.append(current)
-                    current = came_from[current]
-                path.append(start)
-                path.reverse()
-                return path, g_score[end]
+            if current in visited:
+                continue
             
-            for neighbor, weight, line_data in self.edges[current]:
+            visited.add(current)
+            
+            if current == destination:
+                break
+            
+            for neighbor, weight, line_data in self.edges.get(current, []):
                 if line_data['status'] != 'active':
                     continue
                 
                 tentative_g = g_score[current] + weight
                 
                 if tentative_g < g_score[neighbor]:
-                    came_from[neighbor] = current
+                    previous[neighbor] = current
                     g_score[neighbor] = tentative_g
-                    f_score[neighbor] = tentative_g + heuristic(neighbor, end)
-                    heapq.heappush(open_set, (f_score[neighbor], neighbor))
+                    f_score[neighbor] = tentative_g + heuristic(neighbor)
+                    heapq.heappush(pq, (f_score[neighbor], neighbor))
         
-        return None, float('inf')
-    
-    def find_alternative_routes(self, start, end, k=3):
-        """Encontra k rotas alternativas"""
-        routes = []
+        # Reconstrói caminho
+        path = []
+        current = destination
         
-        for _ in range(k):
-            path, cost = self.dijkstra(start, end)
-            if path:
-                routes.append({'path': path, 'cost': cost})
-                # Temporariamente remove arestas do caminho
-                for i in range(len(path) - 1):
-                    self._disable_edge(path[i], path[i+1])
+        if previous[current] is not None or current == source:
+            while current is not None:
+                path.insert(0, current)
+                current = previous[current]
         
-        # Restaura arestas
-        for route in routes:
-            for i in range(len(route['path']) - 1):
-                self._enable_edge(route['path'][i], route['path'][i+1])
-        
-        return routes
-    
-    def _disable_edge(self, from_node, to_node):
-        """Desabilita temporariamente uma aresta"""
-        for i, (neighbor, weight, line_data) in enumerate(self.edges[from_node]):
-            if neighbor == to_node:
-                self.edges[from_node][i][2]['status'] = 'temp_disabled'
-    
-    def _enable_edge(self, from_node, to_node):
-        """Reabilita aresta"""
-        for i, (neighbor, weight, line_data) in enumerate(self.edges[from_node]):
-            if neighbor == to_node and line_data['status'] == 'temp_disabled':
-                self.edges[from_node][i][2]['status'] = 'active'
-    
-    def detect_isolated_nodes(self):
-        """Detecta nós isolados (BFS)"""
-        if not self.nodes:
-            return []
-        
-        visited = set()
-        start = next(iter(self.nodes))
-        queue = deque([start])
-        visited.add(start)
-        
-        while queue:
-            node = queue.popleft()
-            for neighbor, _, line_data in self.edges[node]:
-                if neighbor not in visited and line_data['status'] == 'active':
-                    visited.add(neighbor)
-                    queue.append(neighbor)
-        
-        return [node for node in self.nodes if node not in visited]
+        return path, g_score[destination]
     
     def get_network_stats(self):
-        """Estatísticas da rede"""
-        total_load = sum(n['current_load'] for n in self.nodes.values())
-        total_capacity = sum(n['capacity'] for n in self.nodes.values())
-        overloaded = [nid for nid, n in self.nodes.items() if n['status'] == 'overloaded']
+        """Retorna estatísticas da rede"""
+        total_capacity = 0
+        total_load = 0
+        overloaded = 0
+        
+        for node_id, node_data in self.nodes.items():
+            total_capacity += node_data.get('capacity', 0)
+            total_load += node_data.get('current_load', 0)
+            
+            # Conta nós sobrecarregados (>90% capacidade)
+            utilization = node_data.get('current_load', 0) / node_data.get('capacity', 1)
+            if utilization > 0.9:
+                overloaded += 1
+        
+        utilization = total_load / total_capacity if total_capacity > 0 else 0
+        
+        # Conta nós isolados
+        isolated = sum(1 for node_id in self.nodes if len(self.edges.get(node_id, [])) == 0)
         
         return {
-            'node_count': self.node_count,
-            'edge_count': self.edge_count,
-            'total_load': total_load,
+            'node_count': len(self.nodes),
+            'edge_count': sum(len(edges) for edges in self.edges.values()) // 2,
             'total_capacity': total_capacity,
-            'utilization': total_load / total_capacity if total_capacity > 0 else 0,
-            'overloaded_nodes': len(overloaded),
-            'isolated_nodes': len(self.detect_isolated_nodes())
+            'total_load': total_load,
+            'utilization': utilization,
+            'overloaded_nodes': overloaded,
+            'isolated_nodes': isolated
         }

@@ -166,38 +166,61 @@ class EfficiencyOptimizer:
     
     def suggest_renewable_integration(self):
         """
-        Sugere pontos ideais para integração de energia renovável.
-        Prioriza nós com:
-        - Alta demanda
-        - Baixa eficiência atual
-        - Boa conectividade
+        Sugere integração de energia renovável baseado em análise de nós.
         """
         all_nodes = self.avl.inorder_traversal()
-        candidates = []
+        suggestions = []
         
         for node in all_nodes:
             node_id = node['key']
             data = node['data']
             
-            # Calcula score de viabilidade
-            demand_score = data['current_load'] / data['capacity']
-            efficiency_score = 1 - data['efficiency']
-            connectivity_score = self.graph.nodes[node_id]['connections'] / 10
+            # Calcula score para energia renovável
+            load = data.get('current_load', 0)
+            capacity = data.get('capacity', 1)
+            efficiency = data.get('efficiency', 1)
+            node_type = data.get('type', 'consumer')
             
-            total_score = (demand_score * 0.4 + 
-                          efficiency_score * 0.4 + 
-                          connectivity_score * 0.2)
+            utilization = load / capacity if capacity > 0 else 0
             
-            if total_score > 0.5:
-                candidates.append({
+            # Score baseado em múltiplos fatores
+            score = 0
+            
+            # Alta carga = bom para renovável
+            if utilization > 0.7:
+                score += 0.3
+            
+            # Baixa eficiência = precisa renovável
+            if efficiency < 0.85:
+                score += 0.4
+            
+            # Tipo consumidor = melhor para solar/eólico
+            if node_type == 'consumer':
+                score += 0.3
+            
+            # Se score é relevante, sugere
+            if score >= 0.5:
+                # Determina tipo de fonte recomendada
+                if load < 500:
+                    source = 'solar_panels'
+                elif load < 2000:
+                    source = 'wind_turbine'
+                else:
+                    source = 'solar_farm'
+                
+                suggestions.append({
                     'node_id': node_id,
-                    'score': total_score,
-                    'current_load': data['current_load'],
-                    'efficiency': data['efficiency'],
-                    'recommended_source': self._recommend_renewable_type(data)
+                    'score': round(score, 2),
+                    'current_load': load,
+                    'efficiency': efficiency,
+                    'recommended_source': source,
+                    'estimated_reduction_co2_kg': load * 0.05  # Estimativa simplificada
                 })
         
-        return sorted(candidates, key=lambda x: x['score'], reverse=True)[:5]
+        # Ordena por score
+        suggestions.sort(key=lambda x: x['score'], reverse=True)
+        
+        return suggestions[:5]  # Top 5
     
     def _recommend_renewable_type(self, node_data):
         """Recomenda tipo de energia renovável"""

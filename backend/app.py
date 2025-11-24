@@ -69,24 +69,41 @@ def reset_system():
     try:
         logger.info("🔄 Resetando sistema...")
         
-        # Limpa estruturas em memória
+        # Limpa banco de dados PRIMEIRO
+        session = db.get_session()
+        try:
+            session.query(BalancingOperation).delete()
+            session.query(Prediction).delete()
+            session.query(Event).delete()
+            session.query(SensorReading).delete()
+            session.query(Edge).delete()
+            session.query(Node).delete()
+            session.commit()
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Erro ao limpar banco: {e}")
+        finally:
+            session.close()
+        
+        # Limpa estruturas em memória (não recria, só limpa)
         global avl_tree, bplus_tree, energy_graph, event_queue, priority_heap
+        global load_balancer, energy_router, efficiency_optimizer
+        global predictor, iot_simulator, trainer
+        
+        # Recria TODAS as instâncias
         avl_tree = AVLTree()
         bplus_tree = BPlusTree(order=5)
         energy_graph = EnergyGraph()
         event_queue = EventQueue()
         priority_heap = PriorityHeap()
         
-        # Limpa banco de dados
-        session = db.get_session()
-        session.query(BalancingOperation).delete()
-        session.query(Prediction).delete()
-        session.query(Event).delete()
-        session.query(SensorReading).delete()
-        session.query(Edge).delete()
-        session.query(Node).delete()
-        session.commit()
-        session.close()
+        load_balancer = LoadBalancer(avl_tree, energy_graph)
+        energy_router = EnergyRouter(energy_graph)
+        efficiency_optimizer = EfficiencyOptimizer(energy_graph, avl_tree)
+        
+        predictor = EnergyDemandPredictor()
+        iot_simulator = IoTSimulator()
+        trainer = ModelTrainer(predictor, iot_simulator)
         
         app_state['initialized'] = False
         
@@ -97,6 +114,8 @@ def reset_system():
         
     except Exception as e:
         logger.error(f"❌ Erro ao resetar: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/init', methods=['POST'])
@@ -149,10 +168,15 @@ def _create_sample_network(num_nodes=20):
     substations = []
     for i in range(3):
         node_id = f"SUB_{i}"
-        energy_graph.add_node(node_id, 'substation', capacity=5000, efficiency=0.95)
+        initial_load = random.uniform(2000, 4000)
+        
+        # Adiciona ao grafo COM carga inicial
+        energy_graph.add_node(node_id, 'substation', capacity=5000, 
+                            efficiency=0.95, current_load=initial_load)  # ← ADICIONE current_load
+        
         avl_tree.insert(node_id, {
             'capacity': 5000,
-            'current_load': random.uniform(2000, 4000),
+            'current_load': initial_load,
             'efficiency': 0.95,
             'type': 'substation'
         })
@@ -179,10 +203,14 @@ def _create_sample_network(num_nodes=20):
     transformers = []
     for i in range(7):
         node_id = f"TRF_{i}"
-        energy_graph.add_node(node_id, 'transformer', capacity=2000, efficiency=0.90)
+        initial_load = random.uniform(800, 1600)
+        
+        energy_graph.add_node(node_id, 'transformer', capacity=2000, 
+                            efficiency=0.90, current_load=initial_load)  # ← ADICIONE current_load
+        
         avl_tree.insert(node_id, {
             'capacity': 2000,
-            'current_load': random.uniform(800, 1600),
+            'current_load': initial_load,
             'efficiency': 0.90,
             'type': 'transformer'
         })
@@ -209,10 +237,14 @@ def _create_sample_network(num_nodes=20):
     for i in range(num_nodes - 10):
         node_id = f"CONS_{i}"
         capacity = random.uniform(200, 800)
-        energy_graph.add_node(node_id, 'consumer', capacity=capacity, efficiency=0.85)
+        initial_load = random.uniform(capacity * 0.3, capacity * 0.9)
+        
+        energy_graph.add_node(node_id, 'consumer', capacity=capacity, 
+                            efficiency=0.85, current_load=initial_load)  # ← ADICIONE current_load
+        
         avl_tree.insert(node_id, {
             'capacity': capacity,
-            'current_load': random.uniform(capacity * 0.3, capacity * 0.9),
+            'current_load': initial_load,
             'efficiency': 0.85,
             'type': 'consumer'
         })
@@ -701,6 +733,40 @@ def get_critical_events():
 
 # ==================== ESTATÍSTICAS ====================
 
+@app.route('/api/simulate-overload', methods=['POST'])
+def simulate_overload():
+    """Simula sobrecarga em alguns nós para teste"""
+    try:
+        data = request.get_json() or {}
+        num_nodes = data.get('num_nodes', 3)
+        
+        # Pega nós aleatórios do tipo consumer
+        all_nodes = avl_tree.inorder_traversal()
+        consumers = [n for n in all_nodes if n['data']['type'] == 'consumer']
+        
+        import random
+        selected = random.sample(consumers, min(num_nodes, len(consumers)))
+        
+        for node in selected:
+            node_id = node['key']
+            node_data = node['data']
+            
+            # Sobrecarrega o nó (95% da capacidade)
+            new_load = node_data['capacity'] * 0.95
+            node_data['current_load'] = new_load
+            
+            avl_tree.insert(node_id, node_data)
+            energy_graph.update_load(node_id, new_load)
+        
+        return jsonify({
+            'success': True,
+            'message': f'{len(selected)} nós sobrecarregados para teste',
+            'nodes': [n['key'] for n in selected]
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/stats', methods=['GET'])
 def get_system_stats():
     """
@@ -708,14 +774,20 @@ def get_system_stats():
     GET /api/stats
     """
     try:
+        # Calcula eficiência atual
+        efficiency = load_balancer.calculate_efficiency()
+        
         stats = {
             'network': energy_graph.get_network_stats(),
             'avl_tree': avl_tree.get_stats(),
             'event_queue': event_queue.get_stats(),
             'priority_heap': {'size': priority_heap.size()},
-            'balancing': load_balancer.get_balancing_stats(),
+            'balancing': {
+                **load_balancer.get_balancing_stats(),
+                'efficiency': efficiency  # ← Adiciona eficiência aqui
+            },
             'routing': energy_router.get_routing_stats(),
-            'efficiency': efficiency_optimizer.get_optimization_report(),
+            'efficiency': efficiency,  # ← E aqui também
             'iot': iot_simulator.get_sensor_status(),
             'app_state': app_state,
             'timestamp': datetime.now().isoformat()
@@ -727,6 +799,7 @@ def get_system_stats():
         }), 200
         
     except Exception as e:
+        logger.error(f"Erro ao obter stats: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/health', methods=['GET'])
