@@ -49,7 +49,15 @@ function updateStatusIndicator(isHealthy) {
   }
 }
 
+function setNetworkMode(mode) {
+  if (window.networkViz) {
+    networkViz.setMode(mode);
+  }
+}
+
 // ==================== SYSTEM ACTIONS ====================
+
+
 
 async function initializeSystem() {
     const btn = event.target;
@@ -89,6 +97,100 @@ async function initializeSystem() {
     }
 }
 
+async function updateBenchmarkPanel() {
+  try {
+    const data = await api.request('/benchmark/summary', { method: 'GET' });
+    if (!data.success) return;
+
+    const b = data.benchmark;
+
+    document.getElementById('bench-balance-avg').textContent =
+      b.balance_avg_ms.toFixed(1) + ' ms';
+    document.getElementById('bench-route-avg').textContent =
+      b.route_avg_ms.toFixed(1) + ' ms';
+    document.getElementById('bench-optimize-avg').textContent =
+      b.optimize_avg_ms.toFixed(1) + ' ms';
+
+    if (window.benchmarkChart) {
+      benchmarkChart.data.datasets[0].data = [
+        b.balance_avg_ms,
+        b.route_avg_ms,
+        b.optimize_avg_ms,
+      ];
+      benchmarkChart.update();
+    }
+  } catch (e) {
+    console.error('Erro ao atualizar benchmark:', e);
+  }
+}
+
+async function updateHeapPanel() {
+  try {
+    const data = await api.request('/events/heap', { method: 'GET' });
+    if (!data.success) return;
+
+    const container = document.getElementById('heap-visual');
+    const heap = data.heap || [];
+
+    if (heap.length === 0) {
+      container.innerHTML = '<p>Nenhum evento em fila no momento.</p>';
+      return;
+    }
+
+    container.innerHTML = heap
+      .slice(0, 10)
+      .map((e, idx) => {
+        const colors = {
+          1: '#dc2626',
+          2: '#f97316',
+          3: '#facc15',
+          4: '#22c55e',
+        };
+        const label =
+          e.priority === 1
+            ? 'Crítico'
+            : e.priority === 2
+            ? 'Alto'
+            : e.priority === 3
+            ? 'Médio'
+            : 'Baixo';
+
+        const d = e.data || {};
+        const cap = d.capacity !== undefined ? d.capacity.toFixed(2) : '-';
+        const load = d.load !== undefined ? d.load.toFixed(2) : '-';
+        const util =
+          d.utilization !== undefined
+            ? (d.utilization * 100).toFixed(1) + '%'
+            : '-';
+
+        return `
+        <div style="margin-bottom:8px;padding:8px;border-radius:6px;border-left:4px solid ${
+          colors[e.priority] || '#6b7280'
+        };background:#fff;">
+          <div style="display:flex;justify-content:space-between;">
+            <div>
+              <div style="font-weight:600;">${idx === 0 ? '⬆️ Próximo: ' : ''}${
+          e.event_type.toUpperCase()
+        } - Nó ${e.node_id}</div>
+              <div style="font-size:12px;color:#6b7280;">
+                Cap: ${cap} kW | Load: ${load} kW | Util: ${util}
+              </div>
+            </div>
+            <div style="text-align:right;font-size:12px;">
+              <div style="color:${colors[e.priority] || '#6b7280'};">${label}</div>
+              <div>Prioridade ${e.priority}</div>
+            </div>
+          </div>
+        </div>
+      `;
+      })
+      .join('');
+  } catch (e) {
+    console.error('Erro ao atualizar heap:', e);
+  }
+}
+
+
 async function balanceNetwork() {
   const btn = event.target;
   btn.disabled = true;
@@ -126,9 +228,9 @@ async function optimizeNetwork() {
                 'success'
             );
             
-            // CHAMA A FUNÇÃO AQUI!
             updateEfficiencyMetrics(result);
             await refreshData();
+            await updateMLPanel();
         }
     } catch (error) {
         showNotification('Erro na otimização: ' + error.message, 'error');
@@ -137,6 +239,7 @@ async function optimizeNetwork() {
         btn.innerHTML = '🔧 Otimizar Eficiência';
     }
 }
+
 
 async function trainML() {
   const btn = event.target;
@@ -147,16 +250,24 @@ async function trainML() {
     const result = await api.trainML(50);
 
     if (result.success) {
-      const accuracy = (
-        result.training_result.validation.accuracy * 100
-      ).toFixed(1);
-      showNotification(`Modelo treinado! Acurácia: ${accuracy}%`, "success");
+      const val = result.training_result?.validation || {};
+      const acc = val.accuracy !== undefined ? (val.accuracy * 100).toFixed(1) : null;
+      const loss = val.loss !== undefined ? val.loss.toFixed(4) : null;
+
+      let msg = 'Modelo treinado!';
+      if (acc !== null) msg += ` Acurácia: ${acc}%`;
+      if (loss !== null) msg += ` | Loss: ${loss}`;
+
+      showNotification(msg, 'success');
+      await updateMLPanel();
+    } else if (result.error) {
+      showNotification('Erro no treinamento: ' + result.error, 'error');
     }
   } catch (error) {
-    showNotification("Erro no treinamento: " + error.message, "error");
+    showNotification('Erro no treinamento: ' + error.message, 'error');
   } finally {
     btn.disabled = false;
-    btn.innerHTML = "🤖 Treinar ML";
+    btn.innerHTML = '🤖 Treinar ML';
   }
 }
 
@@ -178,6 +289,12 @@ async function refreshData() {
     // Atualiza charts
     await updateCharts();
 
+    // Atualiza painel de benchmark
+    await updateBenchmarkPanel();
+
+    // Atualiza painel de heap
+    await updateHeapPanel();
+
     // Atualiza métricas de eficiência (se estiver na aba)
     if (
       document.getElementById("tab-efficiency").classList.contains("active")
@@ -188,6 +305,24 @@ async function refreshData() {
     showNotification("Dados atualizados!", "info");
   } catch (error) {
     console.error("Erro ao atualizar dados:", error);
+  }
+}
+
+async function updateMLPanel() {
+  try {
+    const stats = await api.request('/ml/stats', { method: 'GET' });
+    if (!stats.success) return;
+
+    const m = stats.ml_stats;
+    document.getElementById('ml-samples').textContent = m.train_samples || '-';
+    document.getElementById('ml-accuracy').textContent =
+      m.train_accuracy ? (m.train_accuracy * 100).toFixed(1) + '%' : '-';
+    document.getElementById('ml-loss').textContent =
+      m.train_loss ? m.train_loss.toFixed(4) : '-';
+    document.getElementById('ml-last-train').textContent =
+      m.last_train_time || '-';
+  } catch (e) {
+    console.warn('ML stats não disponíveis:', e.message);
   }
 }
 
@@ -266,6 +401,16 @@ if (totalLoad !== undefined && totalLoad !== null) {
       ? stats.efficiency.total_losses.toFixed(2) + " kW"
       : "-";
   }
+
+  // Métricas de sobrecarga
+  if (stats.overload_metrics) {
+  document.getElementById('overload-detected').textContent =
+    stats.overload_metrics.overloads_detected;
+  document.getElementById('overload-resolved').textContent =
+    stats.overload_metrics.overloads_resolved;
+  document.getElementById('overload-avg-time').textContent =
+    stats.overload_metrics.avg_overload_response_ms.toFixed(1) + ' ms';
+}
 }
 
 async function updateNodesTable() {
@@ -305,92 +450,100 @@ async function updateNodesTable() {
 }
 
 async function updateEvents() {
-    try {
-        const eventsData = await api.getCriticalEvents();
-        const container = document.getElementById('events-list');
-        
-        if (!eventsData.events || eventsData.count === 0) {
-            container.innerHTML = `
-                <div style="text-align: center; padding: 40px; color: #6b7280;">
-                    <div style="font-size: 48px; margin-bottom: 16px;">✅</div>
-                    <h3 style="margin: 0; color: #374151;">Nenhum Evento Crítico</h3>
-                    <p style="margin: 8px 0 0 0; font-size: 14px;">A rede está operando normalmente.</p>
-                </div>
-            `;
-            return;
-        }
-        
-        // Agrupa eventos por prioridade
-        const critical = eventsData.events.filter(e => e.priority <= 2);
-        const high = eventsData.events.filter(e => e.priority === 3);
-        const medium = eventsData.events.filter(e => e.priority >= 4);
-        
-        let html = '';
-        
-        // Eventos Críticos
-        if (critical.length > 0) {
-            html += '<h4 style="color: #ef4444; margin: 0 0 12px 0;">🔴 Críticos</h4>';
-            critical.forEach(event => {
-                html += `
-                    <div class="event-item critical" style="background: #fee2e2; border-left: 4px solid #ef4444; padding: 12px; margin-bottom: 8px; border-radius: 6px;">
-                        <div style="font-weight: 600; color: #991b1b; margin-bottom: 4px;">
-                            ${event.type.toUpperCase()} - Nó: ${event.node_id}
-                        </div>
-                        <div style="font-size: 13px; color: #7f1d1d;">
-                            Prioridade: ${event.priority} | ${JSON.stringify(event.data)}
-                        </div>
-                    </div>
-                `;
-            });
-        }
-        
-        // Eventos Altos
-        if (high.length > 0) {
-            html += '<h4 style="color: #f59e0b; margin: 16px 0 12px 0;">🟠 Altos</h4>';
-            high.forEach(event => {
-                html += `
-                    <div class="event-item high" style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 12px; margin-bottom: 8px; border-radius: 6px;">
-                        <div style="font-weight: 600; color: #92400e; margin-bottom: 4px;">
-                            ${event.type.toUpperCase()} - Nó: ${event.node_id}
-                        </div>
-                        <div style="font-size: 13px; color: #78350f;">
-                            Prioridade: ${event.priority} | ${JSON.stringify(event.data)}
-                        </div>
-                    </div>
-                `;
-            });
-        }
-        
-        // Eventos Médios
-        if (medium.length > 0) {
-            html += '<h4 style="color: #3b82f6; margin: 16px 0 12px 0;">🟡 Médios</h4>';
-            medium.forEach(event => {
-                html += `
-                    <div class="event-item medium" style="background: #dbeafe; border-left: 4px solid #3b82f6; padding: 12px; margin-bottom: 8px; border-radius: 6px;">
-                        <div style="font-weight: 600; color: #1e40af; margin-bottom: 4px;">
-                            ${event.type.toUpperCase()} - Nó: ${event.node_id}
-                        </div>
-                        <div style="font-size: 13px; color: #1e3a8a;">
-                            Prioridade: ${event.priority} | ${JSON.stringify(event.data)}
-                        </div>
-                    </div>
-                `;
-            });
-        }
-        
-        container.innerHTML = html;
-        
-    } catch (error) {
-        console.error('Erro ao atualizar eventos:', error);
-        document.getElementById('events-list').innerHTML = `
-            <div style="text-align: center; padding: 40px; color: #ef4444;">
-                <div style="font-size: 48px; margin-bottom: 16px;">⚠️</div>
-                <h3 style="margin: 0;">Erro ao Carregar Eventos</h3>
-                <p style="margin: 8px 0 0 0; font-size: 14px;">${error.message}</p>
-            </div>
-        `;
+  try {
+    const eventsData = await api.getCriticalEvents();
+    const container = document.getElementById('events-list');
+
+    if (!eventsData.events || eventsData.count === 0) {
+      container.innerHTML = `
+        <div style="text-align: center; padding: 40px; color: #6b7280;">
+          <div style="font-size: 48px; margin-bottom: 16px;">✅</div>
+          <h3 style="margin: 0; color: #374151;">Nenhum Evento Crítico</h3>
+          <p style="margin: 8px 0 0 0; font-size: 14px;">A rede está operando normalmente.</p>
+        </div>
+      `;
+      return;
     }
+
+    const critical = eventsData.events.filter(e => e.priority <= 2);
+    const high = eventsData.events.filter(e => e.priority === 3);
+    const medium = eventsData.events.filter(e => e.priority >= 4);
+
+    let html = '';
+
+    // Críticos
+    if (critical.length > 0) {
+      html += '<h4 style="color: #ef4444; margin: 0 0 12px 0;">🔴 Críticos</h4>';
+      critical.forEach(event => {
+        const d = event.data || {};
+        const cap = d.capacity !== undefined ? d.capacity.toFixed(2) : '-';
+        const load = d.load !== undefined ? d.load.toFixed(2) : '-';
+        const util = d.utilization !== undefined ? (d.utilization * 100).toFixed(1) + '%' : '-';
+
+        html += `
+          <div class="event-item critical" style="background: #fee2e2; border-left: 4px solid #ef4444; padding: 12px; margin-bottom: 8px; border-radius: 6px;">
+            <div style="font-weight: 600; color: #991b1b; margin-bottom: 4px;">
+              ${event.type.toUpperCase()} - Nó: ${event.node_id}
+            </div>
+            <div style="font-size: 13px; color: #7f1d1d;">
+              Prioridade: ${event.priority} |
+              Capacidade: ${cap} kW |
+              Carga: ${load} kW |
+              Utilização: ${util}
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    // Altos
+    if (high.length > 0) {
+      html += '<h4 style="color: #f59e0b; margin: 16px 0 12px 0;">🟠 Altos</h4>';
+      high.forEach(event => {
+        html += `
+          <div class="event-item high" style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 12px; margin-bottom: 8px; border-radius: 6px;">
+            <div style="font-weight: 600; color: #92400e; margin-bottom: 4px;">
+              ${event.type.toUpperCase()} - Nó: ${event.node_id}
+            </div>
+            <div style="font-size: 13px; color: #78350f;">
+              Prioridade: ${event.priority} | ${JSON.stringify(event.data)}
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    // Médios
+    if (medium.length > 0) {
+      html += '<h4 style="color: #3b82f6; margin: 16px 0 12px 0;">🟡 Médios</h4>';
+      medium.forEach(event => {
+        html += `
+          <div class="event-item medium" style="background: #dbeafe; border-left: 4px solid #3b82f6; padding: 12px; margin-bottom: 8px; border-radius: 6px;">
+            <div style="font-weight: 600; color: #1e40af; margin-bottom: 4px;">
+              ${event.type.toUpperCase()} - Nó: ${event.node_id}
+            </div>
+            <div style="font-size: 13px; color: #1e3a8a;">
+              Prioridade: ${event.priority} | ${JSON.stringify(event.data)}
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    container.innerHTML = html;
+
+  } catch (error) {
+    console.error('Erro ao atualizar eventos:', error);
+    document.getElementById('events-list').innerHTML = `
+      <div style="text-align: center; padding: 40px; color: #ef4444;">
+        <div style="font-size: 48px; margin-bottom: 16px;">⚠️</div>
+        <h3 style="margin: 0;">Erro ao Carregar Eventos</h3>
+        <p style="margin: 8px 0 0 0; font-size: 14px;">${error.message}</p>
+      </div>
+    `;
+  }
 }
+
 
 function updateEfficiencyMetrics(data) {
     // Eficiência Global
@@ -573,6 +726,33 @@ function initCharts() {
       },
     },
   });
+
+  // Benchmark Chart
+  const benchCtx = document.getElementById('benchmark-chart').getContext('2d');
+window.benchmarkChart = new Chart(benchCtx, {
+  type: 'bar',
+  data: {
+    labels: ['Balanceamento', 'Roteamento', 'Otimização'],
+    datasets: [
+      {
+        label: 'Tempo médio (ms)',
+        data: [0, 0, 0],
+        backgroundColor: [
+          'rgba(59,130,246,0.6)',
+          'rgba(16,185,129,0.6)',
+          'rgba(249,115,22,0.6)',
+        ],
+      },
+    ],
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      y: { beginAtZero: true },
+    },
+  },
+});
 }
 
 async function updateCharts() {
@@ -714,8 +894,31 @@ function showTab(tabName) {
     .forEach((content) => content.classList.remove("active"));
 
   // Adiciona active no selecionado
-  event.target.classList.add("active");
+  // Usa o botão correspondente pelo texto ou data-atributo
+  const buttons = document.querySelectorAll(".tab-btn");
+  buttons.forEach((btn) => {
+    const onclick = btn.getAttribute("onclick") || "";
+    if (onclick.includes(`'${tabName}'`)) {
+      btn.classList.add("active");
+    }
+  });
+
   document.getElementById(`tab-${tabName}`).classList.add("active");
+
+  // Atualizações específicas por aba
+  if (tabName === "efficiency") {
+    updateEfficiencyTab();
+  } else if (tabName === "benchmark") {
+    updateBenchmarkPanel();
+  } else if (tabName === "ml") {
+    updateMLPanel();
+  } else if (tabName === "heap") {
+    updateHeapPanel();
+  } else if (tabName === "events") {
+    updateEvents();
+  } else if (tabName === "nodes") {
+    updateNodesTable();
+  }
 }
 
 // ==================== NOTIFICATIONS ====================

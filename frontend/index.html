@@ -76,6 +76,10 @@
         <!-- Main Content -->
         <div class="main-content">
             <!-- Network Visualization -->
+            <div style="margin-bottom: 8px;">
+                <button onclick="setNetworkMode('force')" class="btn">Layout por Força</button>
+                <button onclick="setNetworkMode('hierarchical')" class="btn">Layout Hierárquico</button>
+            </div>
             <section class="card card-large">
                 <h2>🗺️ Visualização da Rede</h2>
                 <div id="network-viz"></div>
@@ -100,7 +104,11 @@
                 <button class="tab-btn" onclick="showTab('events')">Eventos</button>
                 <button class="tab-btn" onclick="showTab('routing')">Roteamento</button>
                 <button class="tab-btn" onclick="showTab('efficiency')">Eficiência</button>
+                <button class="tab-btn" onclick="showTab('benchmark')">Benchmark</button>
+                <button class="tab-btn" onclick="showTab('ml')">ML</button>
+                <button class="tab-btn" onclick="showTab('heap')">Heap</button>
             </div>
+
 
             <!-- Tab: Nodes -->
             <div id="tab-nodes" class="tab-content active">
@@ -180,6 +188,80 @@
                 <h4>Sugestões de Energia Renovável</h4>
                 <div id="renewable-suggestions"></div>
             </div>
+
+            <div class="metrics-row">
+                <div class="metric-card">
+                    <span class="metric-label">Sobrecargas detectadas</span>
+                    <span id="overload-detected" class="metric-value">0</span>
+                </div>
+                <div class="metric-card">
+                    <span class="metric-label">Sobrecargas resolvidas</span>
+                    <span id="overload-resolved" class="metric-value">0</span>
+                </div>
+                <div class="metric-card">
+                    <span class="metric-label">Tempo médio de resposta</span>
+                    <span id="overload-avg-time" class="metric-value">0 ms</span>
+                </div>
+            </div>
+
+            <!-- Tab: Benchmark -->
+            <div id="tab-benchmark" class="tab-content">
+                <h3>Benchmark & Desempenho</h3>
+                <div class="metrics-row">
+                    <div class="metric-card">
+                        <span class="metric-label">Tempo médio de balanceamento</span>
+                        <span id="bench-balance-avg" class="metric-value">-</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-label">Tempo médio de roteamento</span>
+                        <span id="bench-route-avg" class="metric-value">-</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-label">Tempo médio de otimização</span>
+                        <span id="bench-optimize-avg" class="metric-value">-</span>
+                    </div>
+                </div>
+
+                <canvas id="benchmark-chart" style="height:220px;margin-top:16px;"></canvas>
+            </div>
+
+            <!-- Tab: ML -->
+            <div id="tab-ml" class="tab-content">
+                <h3>Inteligência Artificial (ML)</h3>
+                    <div class="metrics-row">
+                            <div class="metric-card">
+                                <span class="metric-label">Amostras de treino</span>
+                                <span id="ml-samples" class="metric-value">-</span>
+                            </div>
+                        <div class="metric-card">
+                                <span class="metric-label">Acurácia de validação</span>
+                                <span id="ml-accuracy" class="metric-value">-</span>
+                        </div>
+                        <div class="metric-card">
+                            <span class="metric-label">Loss de validação</span>
+                            <span id="ml-loss" class="metric-value">-</span>
+                        </div>
+                        <div class="metric-card">
+                            <span class="metric-label">Último treinamento</span>
+                            <span id="ml-last-train" class="metric-value">-</span>
+                        </div>
+                    </div>
+                <p style="margin-top:16px;color:#4b5563;font-size:14px;">
+                    O modelo aprende padrões de consumo a partir das leituras IoT, gera uma
+                    previsão de demanda futura e ajuda o sistema a se antecipar a picos e
+                    sobrecargas.
+                </p>
+            </div>
+
+            <div id="tab-heap" class="tab-content">
+                <h3>Fila de Prioridade (Heap)</h3>
+                <p style="color:#4b5563;font-size:14px;">
+                    Eventos mais críticos sobem automaticamente para o topo da fila. Essa
+                    estrutura se chama heap de prioridade e garante decisões rápidas em O(log n).
+                </p>
+                <div id="heap-visual" style="margin-top:16px;"></div>
+            </div>
+
         </section>
 
         <!-- Footer -->
