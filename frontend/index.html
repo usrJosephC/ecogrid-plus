@@ -45,8 +45,6 @@
             <button onclick="trainML()" class="btn btn-info">
                 🤖 Treinar ML
             </button>
-            
-            
         </section>
 
         <!-- Stats Cards -->
@@ -88,12 +86,16 @@
             <!-- Charts -->
             <section class="card">
                 <h2>📊 Distribuição de Carga</h2>
-                <canvas id="load-chart"></canvas>
+                <div class="chart-wrapper">
+                    <canvas id="load-chart"></canvas>
+                </div>
             </section>
 
             <section class="card">
                 <h2>📈 Previsão de Demanda (24h)</h2>
-                <canvas id="prediction-chart"></canvas>
+                <div class="chart-wrapper">
+                    <canvas id="prediction-chart"></canvas>
+                </div>
             </section>
         </div>
 
@@ -104,11 +106,8 @@
                 <button class="tab-btn" onclick="showTab('events')">Eventos</button>
                 <button class="tab-btn" onclick="showTab('routing')">Roteamento</button>
                 <button class="tab-btn" onclick="showTab('efficiency')">Eficiência</button>
-                <button class="tab-btn" onclick="showTab('benchmark')">Benchmark</button>
                 <button class="tab-btn" onclick="showTab('ml')">ML</button>
-                <button class="tab-btn" onclick="showTab('heap')">Heap</button>
             </div>
-
 
             <!-- Tab: Nodes -->
             <div id="tab-nodes" class="tab-content active">
@@ -204,62 +203,41 @@
                 </div>
             </div>
 
-            <!-- Tab: Benchmark -->
-            <div id="tab-benchmark" class="tab-content">
-                <h3>Benchmark & Desempenho</h3>
-                <div class="metrics-row">
-                    <div class="metric-card">
-                        <span class="metric-label">Tempo médio de balanceamento</span>
-                        <span id="bench-balance-avg" class="metric-value">-</span>
-                    </div>
-                    <div class="metric-card">
-                        <span class="metric-label">Tempo médio de roteamento</span>
-                        <span id="bench-route-avg" class="metric-value">-</span>
-                    </div>
-                    <div class="metric-card">
-                        <span class="metric-label">Tempo médio de otimização</span>
-                        <span id="bench-optimize-avg" class="metric-value">-</span>
-                    </div>
-                </div>
 
-                <canvas id="benchmark-chart" style="height:220px;margin-top:16px;"></canvas>
-            </div>
 
             <!-- Tab: ML -->
             <div id="tab-ml" class="tab-content">
                 <h3>Inteligência Artificial (ML)</h3>
-                    <div class="metrics-row">
-                            <div class="metric-card">
-                                <span class="metric-label">Amostras de treino</span>
-                                <span id="ml-samples" class="metric-value">-</span>
-                            </div>
-                        <div class="metric-card">
-                                <span class="metric-label">Acurácia de validação</span>
-                                <span id="ml-accuracy" class="metric-value">-</span>
-                        </div>
-                        <div class="metric-card">
-                            <span class="metric-label">Loss de validação</span>
-                            <span id="ml-loss" class="metric-value">-</span>
-                        </div>
-                        <div class="metric-card">
-                            <span class="metric-label">Último treinamento</span>
-                            <span id="ml-last-train" class="metric-value">-</span>
-                        </div>
+                <div class="metrics-row">
+                    <div class="metric-card">
+                        <span class="metric-label">Amostras de treino</span>
+                        <span id="ml-samples" class="metric-value">-</span>
                     </div>
-                <p style="margin-top:16px;color:#4b5563;font-size:14px;">
-                    O modelo aprende padrões de consumo a partir das leituras IoT, gera uma
-                    previsão de demanda futura e ajuda o sistema a se antecipar a picos e
-                    sobrecargas.
-                </p>
-            </div>
+                    <div class="metric-card">
+                        <span class="metric-label">Acurácia de validação</span>
+                        <span id="ml-accuracy" class="metric-value">-</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-label">Loss de validação</span>
+                        <span id="ml-loss" class="metric-value">-</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-label">Último treinamento</span>
+                        <span id="ml-last-train" class="metric-value">-</span>
+                    </div>
+                </div>
 
-            <div id="tab-heap" class="tab-content">
-                <h3>Fila de Prioridade (Heap)</h3>
-                <p style="color:#4b5563;font-size:14px;">
-                    Eventos mais críticos sobem automaticamente para o topo da fila. Essa
-                    estrutura se chama heap de prioridade e garante decisões rápidas em O(log n).
+                <p style="margin-top:16px;color:#4b5563;font-size:14px;">
+                    <strong>O que essas métricas significam?</strong><br>
+                    • <strong>Amostras de treino</strong>: quantidade de leituras históricas de consumo usadas para ensinar o modelo.<br>
+                    • <strong>Acurácia de validação</strong>: porcentagem de previsões corretas em um conjunto de dados que o modelo nunca viu durante o treino.<br>
+                    • <strong>Loss de validação</strong>: erro médio das previsões em relação à demanda real, em kW. Por exemplo, loss = 7,3 kW significa que, em média, o modelo erra cerca de 7,3 kW por ponto de previsão.
                 </p>
-                <div id="heap-visual" style="margin-top:16px;"></div>
+                <p style="margin-top:8px;color:#4b5563;font-size:14px;">
+                    As leituras são geradas pelos sensores IoT simulados em cada nó da rede. Uma parte desses dados é usada para
+                    <strong>treinar</strong> o modelo e outra parte é reservada para <strong>validação</strong>. Assim, as métricas exibidas refletem
+                    a confiabilidade das previsões em dados que o modelo não conhece, e não apenas a memorização do histórico.
+                </p>
             </div>
 
         </section>

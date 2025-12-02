@@ -1,6 +1,8 @@
 """
 Grafo para representar a rede elétrica.
 """
+import heapq
+import math
 
 class EnergyGraph:
     def __init__(self):
@@ -47,7 +49,97 @@ class EnergyGraph:
     def get_neighbors(self, node_id):
         return self.edges.get(node_id, [])
 
-    # dijkstra, astar iguais aos que você já tinha...
+    def dijkstra(self, source, target):
+        """Menor caminho em termos de peso total."""
+        if source not in self.nodes or target not in self.nodes:
+            return [], float("inf")
+
+        dist = {node: float("inf") for node in self.nodes}
+        prev = {node: None for node in self.nodes}
+        dist[source] = 0.0
+
+        heap = [(0.0, source)]
+
+        while heap:
+            current_dist, u = heapq.heappop(heap)
+            if current_dist > dist[u]:
+                continue
+
+            if u == target:
+                break
+
+            for v, weight, line_data in self.get_neighbors(u):
+                # Ignora linhas inativas
+                if line_data.get("status", "active") != "active":
+                    continue
+
+                alt = current_dist + weight
+                if alt < dist[v]:
+                    dist[v] = alt
+                    prev[v] = u
+                    heapq.heappush(heap, (alt, v))
+
+        if dist[target] == float("inf"):
+            return [], float("inf")
+
+        # Reconstrói caminho
+        path = []
+        node = target
+        while node is not None:
+            path.append(node)
+            node = prev[node]
+        path.reverse()
+
+        # atualiza stats básicos
+        self.routing_stats["total_routes"] = self.routing_stats.get("total_routes", 0) + 1
+
+        return path, dist[target]
+
+    def astar(self, source, target):
+        """Versão A* simples com heurística neutra (equivale a Dijkstra)."""
+        # Se quiser algo mais sofisticado, pode usar distância mínima das arestas
+        def heuristic(u, v):
+            return 0.0  # sem info geométrica, mantém neutro
+
+        if source not in self.nodes or target not in self.nodes:
+            return [], float("inf")
+
+        g_score = {node: float("inf") for node in self.nodes}
+        f_score = {node: float("inf") for node in self.nodes}
+        came_from = {node: None for node in self.nodes}
+
+        g_score[source] = 0.0
+        f_score[source] = heuristic(source, target)
+
+        open_set = [(f_score[source], source)]
+
+        while open_set:
+            _, current = heapq.heappop(open_set)
+
+            if current == target:
+                # Reconstrói caminho
+                path = []
+                node = current
+                while node is not None:
+                    path.append(node)
+                    node = came_from[node]
+                path.reverse()
+
+                self.routing_stats["total_routes"] = self.routing_stats.get("total_routes", 0) + 1
+                return path, g_score[target]
+
+            for neighbor, weight, line_data in self.get_neighbors(current):
+                if line_data.get("status", "active") != "active":
+                    continue
+
+                tentative_g = g_score[current] + weight
+                if tentative_g < g_score[neighbor]:
+                    came_from[neighbor] = current
+                    g_score[neighbor] = tentative_g
+                    f_score[neighbor] = tentative_g + heuristic(neighbor, target)
+                    heapq.heappush(open_set, (f_score[neighbor], neighbor))
+
+        return [], float("inf")
 
     def get_network_stats(self):
         total_capacity = 0

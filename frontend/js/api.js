@@ -33,7 +33,7 @@ class EcoGridAPI {
     }
 
     // ==================== SYSTEM ====================
-    
+
     async initialize(numNodes = 20, trainML = true) {
         return this.request('/init', {
             method: 'POST',
@@ -50,7 +50,7 @@ class EcoGridAPI {
     }
 
     // ==================== NODES ====================
-    
+
     async getNodes() {
         return this.request('/nodes');
     }
@@ -74,7 +74,7 @@ class EcoGridAPI {
     }
 
     // ==================== BALANCING ====================
-    
+
     async balanceNetwork() {
         return this.request('/balance', {
             method: 'POST'
@@ -86,7 +86,7 @@ class EcoGridAPI {
     }
 
     // ==================== ROUTING ====================
-    
+
     async findRoute(source, destination, algorithm = 'dijkstra') {
         return this.request('/route', {
             method: 'POST',
@@ -102,7 +102,7 @@ class EcoGridAPI {
     }
 
     // ==================== OPTIMIZATION ====================
-    
+
     async optimizeEfficiency() {
         return this.request('/optimize', {
             method: 'POST'
@@ -110,7 +110,7 @@ class EcoGridAPI {
     }
 
     // ==================== MACHINE LEARNING ====================
-    
+
     async predictDemand(nodeId, hoursAhead = 24) {
         return this.request('/ml/predict', {
             method: 'POST',
@@ -125,8 +125,12 @@ class EcoGridAPI {
         });
     }
 
+    async getMLStats() {
+        return this.request('/ml/stats');
+    }
+
     // ==================== IOT ====================
-    
+
     async getIoTReadings() {
         return this.request('/iot/readings');
     }
@@ -139,7 +143,7 @@ class EcoGridAPI {
     }
 
     // ==================== EVENTS ====================
-    
+
     async getEvents(type = null) {
         const query = type ? `?type=${type}` : '';
         return this.request(`/events${query}`);
@@ -147,6 +151,16 @@ class EcoGridAPI {
 
     async getCriticalEvents() {
         return this.request('/events/critical');
+    }
+
+    // ==================== BENCHMARK & HEAP ====================
+
+    async getBenchmarkSummary() {
+        return this.request('/benchmark/summary');
+    }
+
+    async getHeapSnapshot() {
+        return this.request('/events/heap');
     }
 }
 

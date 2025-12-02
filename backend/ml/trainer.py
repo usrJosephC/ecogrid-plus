@@ -32,35 +32,58 @@ class ModelTrainer:
     
     def train_model(self, epochs=100, validation_split=0.2):
         """
-        Treina modelo com validação.
+        Treina modelo com validação e retorna métricas padronizadas.
         """
         print("🔄 Gerando dados de treinamento...")
         training_data = self.generate_training_data()
-        
+
+        total_samples = len(training_data)
+
         # Split train/validation
-        split_idx = int(len(training_data) * (1 - validation_split))
+        split_idx = int(total_samples * (1 - validation_split))
         train_data = training_data[:split_idx]
         val_data = training_data[split_idx:]
-        
+
         print(f"📊 Dados: {len(train_data)} treino, {len(val_data)} validação")
-        
+
         # Treina
         print("🚀 Iniciando treinamento...")
         train_result = self.predictor.train(train_data, epochs=epochs)
-        
+
         # Valida
         print("✅ Validando modelo...")
         val_metrics = self.validate_model(val_data)
-        
+
+        # Garante que validação tenha accuracy e uma métrica de loss
+        accuracy = float(val_metrics.get('accuracy', 0.0))
+
+        # Usa RMSE como "loss" principal para o frontend
+        loss = float(
+            val_metrics.get('rmse') or
+            val_metrics.get('mae') or
+            val_metrics.get('mse') or
+            0.0
+        )
+
         result = {
-            'timestamp': datetime.now().isoformat(),
-            'training': train_result,
-            'validation': val_metrics,
-            'data_size': len(training_data)
+            "timestamp": datetime.now().isoformat(),
+            "training": train_result,
+            "validation": {
+                "mse": float(val_metrics.get("mse", 0.0)),
+                "mae": float(val_metrics.get("mae", 0.0)),
+                "rmse": float(val_metrics.get("rmse", 0.0)),
+                "r2_score": float(val_metrics.get("r2_score", 0.0)),
+                "accuracy": accuracy,
+                "loss": loss,
+            },
+            "data_size": total_samples,
+            # campos padronizados para o backend/frontend
+            "train_samples": total_samples,
+            "epochs": epochs,
         }
-        
+
         self.training_history.append(result)
-        
+
         return result
     
     def validate_model(self, validation_data):

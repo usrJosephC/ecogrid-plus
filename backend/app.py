@@ -10,6 +10,7 @@ import logging
 import json
 import time
 
+
 from config import Config
 from models.database import db, Base
 from models.schemas import (
@@ -319,11 +320,9 @@ def _create_sample_network(num_nodes=20):
             session.commit()
         session.close()
 
-    # Subestações <-> Transformadores
-    for i, sub in enumerate(substations):
-        for j in range(2, 4):
-            trf_idx = (i * 2 + j - 2) % len(transformers)
-            trf = transformers[trf_idx]
+    # Subestações <-> Transformadores (totalmente conectadas)
+    for sub in substations:
+        for trf in transformers:
             distance = random.uniform(5, 20)
             energy_graph.add_edge(sub, trf, distance, resistance=0.05)
 
@@ -339,6 +338,7 @@ def _create_sample_network(num_nodes=20):
             session.add(edge)
             session.commit()
             session.close()
+
 
     # Transformadores <-> Consumidores
     for i, cons in enumerate(consumers):
@@ -574,7 +574,7 @@ def get_balance_stats():
 @app.route("/api/route", methods=["POST"])
 def find_route():
     """
-    Encontra rota ótima entre dois nós.
+    Encontra rota ótima entre dois nós e compara algoritmos.
     POST /api/route
     Body: { "source": "SUB_0", "destination": "CONS_5", "algorithm": "dijkstra" }
     """
@@ -582,26 +582,50 @@ def find_route():
         data = request.get_json()
         source = data.get("source")
         destination = data.get("destination")
-        algorithm = data.get("algorithm", "dijkstra")
+        preferred = data.get("algorithm", "dijkstra")
 
         if not source or not destination:
             return jsonify({"success": False, "error": "source e destination obrigatórios"}), 400
 
+        # roda algoritmo escolhido
         start = time.time()
-        result = energy_router.find_optimal_route(source, destination, algorithm)
-        elapsed_ms = (time.time() - start) * 1000.0
+        main_result = energy_router.find_optimal_route(source, destination, preferred)
+        main_elapsed_ms = (time.time() - start) * 1000.0
 
-        benchmark_history["route"].append(elapsed_ms)
+        # roda também o outro algoritmo só para benchmark
+        other_algo = "astar" if preferred == "dijkstra" else "dijkstra"
+        start_other = time.time()
+        other_result = energy_router.find_optimal_route(source, destination, other_algo)
+        other_elapsed_ms = (time.time() - start_other) * 1000.0
+
+        # salva benchmarks separados por algoritmo
+        benchmark_history["route"].append({
+            "source": source,
+            "destination": destination,
+            "preferred": preferred,
+            preferred: main_elapsed_ms,
+            other_algo: other_elapsed_ms
+        })
         if len(benchmark_history["route"]) > 50:
             benchmark_history["route"].pop(0)
 
-        if result["path"]:
-            power_loss = energy_router.calculate_power_loss(result["path"])
-            result["power_loss"] = power_loss
+        # calcula perda de potência só para a rota principal se existir
+        if main_result["path"]:
+            power_loss = energy_router.calculate_power_loss(main_result["path"])
+            main_result["power_loss"] = power_loss
 
-        result["execution_time"] = elapsed_ms / 1000.0
+        main_result["execution_time"] = main_elapsed_ms / 1000.0
 
-        return jsonify({"success": True, "route": result}), 200
+        comparison = {
+            preferred: main_elapsed_ms,
+            other_algo: other_elapsed_ms,
+        }
+
+        return jsonify({
+            "success": True,
+            "route": main_result,
+            "comparison": comparison
+        }), 200
 
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -658,7 +682,7 @@ def optimize_efficiency():
 
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
-
+    
 # ==================== MACHINE LEARNING ====================
 
 @app.route("/api/ml/predict", methods=["POST"])
@@ -701,22 +725,23 @@ def train_model():
         logger.info(f"🤖 Treinando modelo por {epochs} épocas...")
         result = trainer.train_model(epochs=epochs)
 
-        # Garante que sempre exista o bloco validation com accuracy e loss
+        # Garante estrutura padrão
         validation = result.get("validation", {})
-        if "accuracy" not in validation:
-            validation["accuracy"] = 0.0
-        if "loss" not in validation:
-            validation["loss"] = 0.0
+        validation.setdefault("accuracy", 0.0)
+        validation.setdefault("loss", 0.0)
         result["validation"] = validation
+        result.setdefault("train_samples", 0)
+        result.setdefault("epochs", epochs)
+        result.setdefault("timestamp", datetime.now().isoformat())
 
         predictor.save_model(Config.MODEL_PATH)
 
         predictor.last_train_meta = {
-            "epochs": epochs,
+            "epochs": result["epochs"],
             "train_accuracy": validation["accuracy"],
             "train_loss": validation["loss"],
-            "train_samples": result.get("train_samples", 0),
-            "last_train_time": datetime.now().isoformat(),
+            "train_samples": result["train_samples"],
+            "last_train_time": result["timestamp"],
         }
 
         return jsonify({"success": True, "training_result": result}), 200
@@ -935,22 +960,29 @@ def get_system_stats():
 
 @app.route("/api/benchmark/summary", methods=["GET"])
 def get_benchmark_summary():
-    """
-    Retorna métricas de benchmark para exibir na UI.
-    GET /api/benchmark/summary
-    """
     def avg(lst):
         return sum(lst) / len(lst) if lst else 0.0
 
+    # se você manteve objetos com dijkstra/astar em benchmark_history["route"],
+    # pode reduzir para uma média única:
+    route_times = []
+    for r in benchmark_history["route"]:
+        if isinstance(r, dict):
+            if r.get("dijkstra") is not None:
+                route_times.append(r["dijkstra"])
+            if r.get("astar") is not None:
+                route_times.append(r["astar"])
+
     summary = {
         "balance_avg_ms": avg(benchmark_history["balance"]),
-        "route_avg_ms": avg(benchmark_history["route"]),
+        "route_avg_ms": avg(route_times),
         "optimize_avg_ms": avg(benchmark_history["optimize"]),
         "balance_samples": len(benchmark_history["balance"]),
         "route_samples": len(benchmark_history["route"]),
         "optimize_samples": len(benchmark_history["optimize"]),
     }
     return jsonify({"success": True, "benchmark": summary}), 200
+
 
 
 @app.route("/api/health", methods=["GET"])
