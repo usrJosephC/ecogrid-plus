@@ -1,9 +1,9 @@
 
 """
 Algoritmos de Otimização
-- LoadBalancer: Balanceamento dinâmico de carga
-- EnergyRouter: Roteamento com Dijkstra e A*
-- EfficiencyOptimizer: Otimização de eficiência energética
+    - LoadBalancer: Balanceamento dinâmico de carga
+    - EnergyRouter: Roteamento com Dijkstra e A*
+    - EfficiencyOptimizer: Otimização de eficiência energética
 """
 
 from .balancing import LoadBalancer
