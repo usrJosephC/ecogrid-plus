@@ -960,29 +960,22 @@ def get_system_stats():
 
 @app.route("/api/benchmark/summary", methods=["GET"])
 def get_benchmark_summary():
+    """
+    Retorna métricas de benchmark para exibir na UI.
+    GET /api/benchmark/summary
+    """
     def avg(lst):
         return sum(lst) / len(lst) if lst else 0.0
 
-    # se você manteve objetos com dijkstra/astar em benchmark_history["route"],
-    # pode reduzir para uma média única:
-    route_times = []
-    for r in benchmark_history["route"]:
-        if isinstance(r, dict):
-            if r.get("dijkstra") is not None:
-                route_times.append(r["dijkstra"])
-            if r.get("astar") is not None:
-                route_times.append(r["astar"])
-
     summary = {
         "balance_avg_ms": avg(benchmark_history["balance"]),
-        "route_avg_ms": avg(route_times),
+        "route_avg_ms": avg(benchmark_history["route"]),
         "optimize_avg_ms": avg(benchmark_history["optimize"]),
         "balance_samples": len(benchmark_history["balance"]),
         "route_samples": len(benchmark_history["route"]),
         "optimize_samples": len(benchmark_history["optimize"]),
     }
     return jsonify({"success": True, "benchmark": summary}), 200
-
 
 
 @app.route("/api/health", methods=["GET"])

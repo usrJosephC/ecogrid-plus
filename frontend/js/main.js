@@ -96,6 +96,101 @@ async function initializeSystem() {
   }
 }
 
+async function updateBenchmarkPanel() {
+  try {
+    const data = await api.getBenchmarkSummary();
+    if (!data.success) return;
+
+    const b = data.benchmark || {};
+
+    const bal = isNaN(b.balance_avg_ms) ? 0 : b.balance_avg_ms;
+    const rot = isNaN(b.route_avg_ms) ? 0 : b.route_avg_ms;
+    const opt = isNaN(b.optimize_avg_ms) ? 0 : b.optimize_avg_ms;
+
+    document.getElementById("bench-balance-avg").textContent =
+      bal.toFixed(3) + " ms";
+    document.getElementById("bench-route-avg").textContent =
+      rot.toFixed(3) + " ms";
+    document.getElementById("bench-optimize-avg").textContent =
+      opt.toFixed(3) + " ms";
+
+    if (window.benchmarkChart) {
+      benchmarkChart.data.datasets[0].data = [bal, rot, opt];
+      benchmarkChart.update();
+    }
+  } catch (e) {
+    console.error("Erro ao atualizar benchmark:", e);
+  }
+}
+
+async function updateHeapPanel() {
+  try {
+    const data = await api.request("/events/heap", { method: "GET" });
+    if (!data.success) return;
+
+    const container = document.getElementById("heap-visual");
+    const heap = data.heap || [];
+
+    if (heap.length === 0) {
+      container.innerHTML = "<p>Nenhum evento em fila no momento.</p>";
+      return;
+    }
+
+    container.innerHTML = heap
+      .slice(0, 10)
+      .map((e, idx) => {
+        const colors = {
+          1: "#dc2626",
+          2: "#f97316",
+          3: "#facc15",
+          4: "#22c55e",
+        };
+        const label =
+          e.priority === 1
+            ? "Crítico"
+            : e.priority === 2
+            ? "Alto"
+            : e.priority === 3
+            ? "Médio"
+            : "Baixo";
+
+        const d = e.data || {};
+        const cap = d.capacity !== undefined ? d.capacity.toFixed(2) : "-";
+        const load = d.load !== undefined ? d.load.toFixed(2) : "-";
+        const util =
+          d.utilization !== undefined
+            ? (d.utilization * 100).toFixed(1) + "%"
+            : "-";
+
+        return `
+        <div style="margin-bottom:8px;padding:8px;border-radius:6px;border-left:4px solid ${
+          colors[e.priority] || "#6b7280"
+        };background:#fff;">
+          <div style="display:flex;justify-content:space-between;">
+            <div>
+              <div style="font-weight:600;">${
+                idx === 0 ? "⬆️ Próximo: " : ""
+              }${e.event_type.toUpperCase()} - Nó ${e.node_id}</div>
+              <div style="font-size:12px;color:#6b7280;">
+                Cap: ${cap} kW | Load: ${load} kW | Util: ${util}
+              </div>
+            </div>
+            <div style="text-align:right;font-size:12px;">
+              <div style="color:${
+                colors[e.priority] || "#6b7280"
+              };">${label}</div>
+              <div>Prioridade ${e.priority}</div>
+            </div>
+          </div>
+        </div>
+      `;
+      })
+      .join("");
+  } catch (e) {
+    console.error("Erro ao atualizar heap:", e);
+  }
+}
+
 async function balanceNetwork() {
   const btn = event.target;
   btn.disabled = true;
@@ -197,6 +292,9 @@ async function refreshData() {
 
     // Atualiza charts
     await updateCharts();
+
+    // Atualiza painel de heap
+    await updateHeapPanel();
 
     // Atualiza métricas de eficiência (se estiver na aba)
     if (
@@ -655,6 +753,35 @@ function initCharts() {
       },
     },
   });
+
+  const ctxBenchmark = document
+    .getElementById("benchmark-chart")
+    .getContext("2d");
+
+  benchmarkChart = new Chart(ctxBenchmark, {
+    type: "bar",
+    data: {
+      labels: ["Balanceamento", "Roteamento", "Otimização"],
+      datasets: [
+        {
+          label: "Tempo médio (ms)",
+          data: [0, 0, 0],
+          backgroundColor: ["#60a5fa", "#34d399", "#fbbf24"],
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          beginAtZero: true,
+          max: 0.001, // força topo em 0,5 ms
+          title: { display: true, text: "ms" },
+        },
+      },
+    },
+  });
 }
 
 async function updateCharts() {
@@ -839,6 +966,8 @@ function showTab(tabName) {
     updateEfficiencyTab(); 
   } else if (tabName === "ml") {
     updateMLPanel();
+  } else if (tabName === "heap") {
+    updateHeapPanel();
   } else if (tabName === "events") {
     updateEvents();
   } else if (tabName === "nodes") {
