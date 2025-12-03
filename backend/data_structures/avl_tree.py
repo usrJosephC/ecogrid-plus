@@ -63,11 +63,11 @@ class AVLTree:
     def insert(self, key, data):
         """Insere nó e rebalancea a árvore - O(log n)"""
         self.root = self._insert_recursive(self.root, key, data)
-        self.size += 1
     
     def _insert_recursive(self, node, key, data):
         # Inserção normal de BST
         if not node:
+            self.size += 1
             return AVLNode(key, data)
         
         if key < node.key:

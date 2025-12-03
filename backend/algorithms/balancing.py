@@ -90,7 +90,7 @@ class LoadBalancer:
             'total_transferred': load_to_transfer - remaining_load
         })
         
-        return remaining_load < load_to_transfer * 0.1  # 90% redistribuído
+        return remaining_load < load_to_transfer * 0.1
     
     def _apply_transfer(self, transfer):
         """Aplica transferência de carga"""

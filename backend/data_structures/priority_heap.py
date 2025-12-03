@@ -66,6 +66,23 @@ class PriorityHeap:
         self.heap.clear()
         self.counter = 0
 
+    def to_list(self):
+        """
+        Retorna uma lista simples com os elementos do heap
+        para visualização: [{event_type, node_id, priority, data}, ...]
+        """
+        result = []
+        for item in self.heap:
+            result.append(
+                {
+                    "event_type": item.event_type,
+                    "node_id": item.node_id,
+                    "priority": item.priority,
+                    "data": item.data,
+                }
+            )
+        return result
+
 # Definição de níveis de prioridade
 class Priority:
     CRITICAL = 1      # Blackout iminente

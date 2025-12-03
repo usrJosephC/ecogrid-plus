@@ -45,8 +45,6 @@
             <button onclick="trainML()" class="btn btn-info">
                 🤖 Treinar ML
             </button>
-            
-            
         </section>
 
         <!-- Stats Cards -->
@@ -76,6 +74,10 @@
         <!-- Main Content -->
         <div class="main-content">
             <!-- Network Visualization -->
+            <div style="margin-bottom: 8px;">
+                <button onclick="setNetworkMode('force')" class="btn">Layout por Força</button>
+                <button onclick="setNetworkMode('hierarchical')" class="btn">Layout Hierárquico</button>
+            </div>
             <section class="card card-large">
                 <h2>🗺️ Visualização da Rede</h2>
                 <div id="network-viz"></div>
@@ -84,12 +86,16 @@
             <!-- Charts -->
             <section class="card">
                 <h2>📊 Distribuição de Carga</h2>
-                <canvas id="load-chart"></canvas>
+                <div class="chart-wrapper">
+                    <canvas id="load-chart"></canvas>
+                </div>
             </section>
 
             <section class="card">
                 <h2>📈 Previsão de Demanda (24h)</h2>
-                <canvas id="prediction-chart"></canvas>
+                <div class="chart-wrapper">
+                    <canvas id="prediction-chart"></canvas>
+                </div>
             </section>
         </div>
 
@@ -100,6 +106,7 @@
                 <button class="tab-btn" onclick="showTab('events')">Eventos</button>
                 <button class="tab-btn" onclick="showTab('routing')">Roteamento</button>
                 <button class="tab-btn" onclick="showTab('efficiency')">Eficiência</button>
+                <button class="tab-btn" onclick="showTab('ml')">ML</button>
             </div>
 
             <!-- Tab: Nodes -->
@@ -180,6 +187,59 @@
                 <h4>Sugestões de Energia Renovável</h4>
                 <div id="renewable-suggestions"></div>
             </div>
+
+            <div class="metrics-row">
+                <div class="metric-card">
+                    <span class="metric-label">Sobrecargas detectadas</span>
+                    <span id="overload-detected" class="metric-value">0</span>
+                </div>
+                <div class="metric-card">
+                    <span class="metric-label">Sobrecargas resolvidas</span>
+                    <span id="overload-resolved" class="metric-value">0</span>
+                </div>
+                <div class="metric-card">
+                    <span class="metric-label">Tempo médio de resposta</span>
+                    <span id="overload-avg-time" class="metric-value">0 ms</span>
+                </div>
+            </div>
+
+
+
+            <!-- Tab: ML -->
+            <div id="tab-ml" class="tab-content">
+                <h3>Inteligência Artificial (ML)</h3>
+                <div class="metrics-row">
+                    <div class="metric-card">
+                        <span class="metric-label">Amostras de treino</span>
+                        <span id="ml-samples" class="metric-value">-</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-label">Acurácia de validação</span>
+                        <span id="ml-accuracy" class="metric-value">-</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-label">Loss de validação</span>
+                        <span id="ml-loss" class="metric-value">-</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-label">Último treinamento</span>
+                        <span id="ml-last-train" class="metric-value">-</span>
+                    </div>
+                </div>
+
+                <p style="margin-top:16px;color:#4b5563;font-size:14px;">
+                    <strong>O que essas métricas significam?</strong><br>
+                    • <strong>Amostras de treino</strong>: quantidade de leituras históricas de consumo usadas para ensinar o modelo.<br>
+                    • <strong>Acurácia de validação</strong>: porcentagem de previsões corretas em um conjunto de dados que o modelo nunca viu durante o treino.<br>
+                    • <strong>Loss de validação</strong>: erro médio das previsões em relação à demanda real, em kW. Por exemplo, loss = 7,3 kW significa que, em média, o modelo erra cerca de 7,3 kW por ponto de previsão.
+                </p>
+                <p style="margin-top:8px;color:#4b5563;font-size:14px;">
+                    As leituras são geradas pelos sensores IoT simulados em cada nó da rede. Uma parte desses dados é usada para
+                    <strong>treinar</strong> o modelo e outra parte é reservada para <strong>validação</strong>. Assim, as métricas exibidas refletem
+                    a confiabilidade das previsões em dados que o modelo não conhece, e não apenas a memorização do histórico.
+                </p>
+            </div>
+
         </section>
 
         <!-- Footer -->

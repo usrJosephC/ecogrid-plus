@@ -65,25 +65,42 @@ class BPlusTree:
         order = self.order
         child = parent.children[index]
         new_child = BPlusNode(order, is_leaf=child.is_leaf)
-        
+
         mid = order // 2
-        
-        # Copia segunda metade para novo nó
-        new_child.keys = child.keys[mid:]
-        child.keys = child.keys[:mid]
-        
+
         if child.is_leaf:
+            # Folha: divide keys/values e encadeia via next
+            new_child.keys = child.keys[mid:]
             new_child.values = child.values[mid:]
+            child.keys = child.keys[:mid]
             child.values = child.values[:mid]
+
             new_child.next = child.next
             child.next = new_child
+
+            # Sobe a primeira chave do novo nó para o pai
+            separator = new_child.keys[0]
+            parent.keys.insert(index, separator)
+            parent.children.insert(index + 1, new_child)
         else:
-            new_child.children = child.children[mid:]
-            child.children = child.children[:mid]
-        
-        # Insere chave no pai
-        parent.keys.insert(index, new_child.keys[0])
-        parent.children.insert(index + 1, new_child)
+            # Nó interno: a chave do meio sobe; filhos divididos mantendo len(children) = len(keys)+1
+            promote_key = child.keys[mid]
+
+            # esquerda fica com keys < promote_key e os filhos correspondentes
+            left_keys = child.keys[:mid]
+            right_keys = child.keys[mid + 1:]
+
+            left_children = child.children[: mid + 1]
+            right_children = child.children[mid + 1 :]
+
+            child.keys = left_keys
+            child.children = left_children
+
+            new_child.keys = right_keys
+            new_child.children = right_children
+
+            parent.keys.insert(index, promote_key)
+            parent.children.insert(index + 1, new_child)
     
     def search(self, key):
         """Busca valor por chave - O(log n)"""
@@ -91,12 +108,15 @@ class BPlusTree:
     
     def _search_recursive(self, node, key):
         i = 0
-        while i < len(node.keys) and key > node.keys[i]:
+        # mesma lógica de _find_leaf: anda enquanto key >= chave[i]
+        while i < len(node.keys) and key >= node.keys[i]:
             i += 1
-        
+
         if node.is_leaf:
-            if i < len(node.keys) and node.keys[i] == key:
-                return node.values[i]
+            # como estamos numa folha, basta procurar na lista
+            for j, k in enumerate(node.keys):
+                if k == key:
+                    return node.values[j]
             return None
         else:
             return self._search_recursive(node.children[i], key)
